@@ -1,0 +1,24 @@
+[package]
+name = "krakenrs"
+version = "0.1.0"
+authors = ["Chris Beck <beck.ct@gmail.com>"]
+edition = "2018"
+
+[lib]
+name = "krakenrs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "krak"
+path = "src/bin/krak.rs"
+
+[dependencies]
+base64 = "0.13"
+displaydoc = "0.1"
+hmac = "0.10"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.9.2"
+structopt = "0.3"
+url = "2.2"

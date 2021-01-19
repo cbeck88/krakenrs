@@ -1,4 +1,4 @@
-//! This module crates a low-level client for kraken API handling required headers
+//! This module provides a low-level client for kraken API handling required headers
 //! and serialization. It is similar to krakenex python code, but less messy.
 //! https://github.com/veox/python3-krakenex/blob/master/krakenex/api.py
 

@@ -1,5 +1,6 @@
 use core::convert::TryFrom;
-use krakenrs::{KrakenAPI, KrakenClientConfig, KrakenResult, SystemStatus, Time};
+use displaydoc::Display;
+use krakenrs::{KrakenAPI, KrakenClientConfig, KrakenResult};
 use serde::Serialize;
 use structopt::StructOpt;
 
@@ -17,6 +18,8 @@ enum Command {
     Time,
     /// Get kraken system status
     SystemStatus,
+    /// Get kraken's asset list
+    Assets,
 }
 
 /// Take the "error" field from KrakenResult and log errors on stderr
@@ -35,11 +38,15 @@ fn main() {
 
     match config.command {
         Command::Time => {
-            let result: Time = log_errors(api.time().expect("api call failed"));
+            let result = log_errors(api.time().expect("api call failed"));
             println!("{:?}", result);
         }
         Command::SystemStatus => {
-            let result: SystemStatus = log_errors(api.system_status().expect("api call failed"));
+            let result = log_errors(api.system_status().expect("api call failed"));
+            println!("{:?}", result);
+        }
+        Command::Assets => {
+            let result = log_errors(api.assets().expect("api call failed"));
             println!("{:?}", result);
         }
     }

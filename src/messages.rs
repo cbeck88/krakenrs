@@ -24,9 +24,18 @@ pub struct Time {
     unixtime: u64,
 }
 
-/// Result of kraken "SystemStatus" API call
+/// Result of kraken public "SystemStatus" API call
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SystemStatus {
     status: String,
     timestamp: String,
+}
+
+/// (Substructure within) Result of kraken public "Assets" API call
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AssetInfo {
+    altname: String,
+    aclass: String,
+    decimals: u32,
+    display_decimals: u32,
 }

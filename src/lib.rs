@@ -9,6 +9,7 @@ mod messages;
 pub use messages::*;
 
 use core::convert::TryFrom;
+use std::collections::HashMap;
 
 /// A connection to the Kraken API
 /// This only supports blocking http requests for now
@@ -24,6 +25,10 @@ impl KrakenAPI {
     /// Get the kraken system's status
     pub fn system_status(&mut self) -> Result<KrakenResult<SystemStatus>> {
         self.client.query_public("SystemStatus", Empty {})
+    }
+    /// Get the list of kraken's supported assets
+    pub fn assets(&mut self) -> Result<KrakenResult<HashMap<String, AssetInfo>>> {
+        self.client.query_public("Assets", Empty {})
     }
 }
 

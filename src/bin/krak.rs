@@ -3,26 +3,28 @@ use krakenrs::{KrakenAPI, KrakenClientConfig, KrakenResult, SystemStatus, Time};
 use serde::Serialize;
 use structopt::StructOpt;
 
+/// Structure representing parsed command-line arguments to krak executable
 #[derive(StructOpt)]
 struct KrakConfig {
     #[structopt(subcommand)]
     command: Command,
 }
 
-#[derive(StructOpt)]
+/// Commands supported by krak executable
+#[derive(StructOpt, Display)]
 enum Command {
+    /// Get kraken system time
     Time,
+    /// Get kraken system status
     SystemStatus,
 }
 
+/// Take the "error" field from KrakenResult and log errors on stderr
+/// Then, discard them, returning only the parsed result.
 fn log_errors<T: Serialize>(kraken_result: KrakenResult<T>) -> T {
     for err in kraken_result.error {
         eprintln!("{}", err);
     }
-    eprintln!(
-        "{}",
-        serde_json::to_string(&kraken_result.result).expect("Could not serialize json")
-    );
     kraken_result.result
 }
 

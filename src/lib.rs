@@ -30,6 +30,14 @@ impl KrakenAPI {
     pub fn assets(&mut self) -> Result<KrakenResult<HashMap<String, AssetInfo>>> {
         self.client.query_public("Assets", Empty {})
     }
+    /// Get the list of open orders
+    pub fn get_open_orders(
+        &mut self,
+        userref: Option<UserRefId>,
+    ) -> Result<KrakenResult<HashMap<TxId, OrderInfo>>> {
+        self.client
+            .query_private("GetOpenOrders", GetOpenOrdersRequest { nonce: 0, userref })
+    }
 }
 
 impl TryFrom<KrakenClientConfig> for KrakenAPI {

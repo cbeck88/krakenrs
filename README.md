@@ -10,3 +10,7 @@ A (WIP) Kraken API client in Rust.
 
 Public and private APIs are supported, but not all the options are exposed.
 If something you need is missing, pull requests are welcome!
+
+Other projects of interest:
+- [`coinnect`](https://github.com/hugues31/coinnect)
+- [`python3-krakenex`](https://github.com/veox/python3-krakenex)

@@ -1,6 +1,5 @@
 //! Structures representing json schema sent to and from Kraken
 
-use crate::kraken_client::HasNonce;
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
 
@@ -163,17 +162,6 @@ pub struct OrderDescriptionInfo {
 /// Get open orders request
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct GetOpenOrdersRequest {
-    /// Nonce required by private APIs
-    pub nonce: u64,
     /// restrict results to given user reference id (optional)
     pub userref: Option<UserRefId>,
-}
-
-impl HasNonce for GetOpenOrdersRequest {
-    fn get_nonce(&self) -> u64 {
-        self.nonce
-    }
-    fn set_nonce(&mut self, val: u64) {
-        self.nonce = val;
-    }
 }

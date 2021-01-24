@@ -9,6 +9,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, InvalidHeaderValue},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256, Sha512};
 use std::{convert::TryFrom, str::FromStr, time::SystemTime};
 use url::{ParseError as UrlParseError, Url};
@@ -21,15 +22,6 @@ pub struct KrakenClientConfig {
     pub key: String,
     /// The API key secret
     pub secret: String,
-}
-
-/// A trait for objects representing a json schema that support a nonce field.
-/// This is required by json scehmas that are arguments to private kraken APIs.
-pub trait HasNonce: Serialize {
-    /// Get nonce value
-    fn get_nonce(&self) -> u64;
-    /// Set nonce value
-    fn set_nonce(&mut self, val: u64);
 }
 
 /// A low-level https connection to kraken that can execute public or private methods.
@@ -58,11 +50,11 @@ impl TryFrom<KrakenClientConfig> for KrakenClient {
 }
 
 impl KrakenClient {
-    fn query<D: Serialize, R: DeserializeOwned>(
+    fn query<R: DeserializeOwned>(
         &mut self,
         url_path: &str,
         headers: HeaderMap,
-        json_data: D,
+        json_string: String,
     ) -> Result<R> {
         let url = self.base_url.join(url_path)?;
 
@@ -70,7 +62,7 @@ impl KrakenClient {
             .client
             .post(url)
             .headers(headers)
-            .json(&json_data)
+            .body(json_string)
             .send()?;
         if !(response.status() == 200 || response.status() == 201 || response.status() == 202) {
             return Err(Error::BadStatus(response));
@@ -88,14 +80,16 @@ impl KrakenClient {
     ) -> Result<R> {
         let url_path = format!("/{}/public/{}", self.version, method);
 
-        self.query(&url_path, HeaderMap::new(), json_data)
+        let json_string = serde_json::to_string(&json_data).map_err(Error::SerializingJson)?;
+
+        self.query(&url_path, HeaderMap::new(), json_string)
     }
 
     /// Execute a private API, given method, and object matching the expected schema, and returning expected schema or an error.
-    pub fn query_private<D: Serialize + HasNonce, R: DeserializeOwned>(
+    pub fn query_private<D: Serialize, R: DeserializeOwned>(
         &mut self,
         method: &str,
-        mut json_data: D,
+        json_data: D,
     ) -> Result<R> {
         if self.config.key.is_empty() || self.config.secret.is_empty() {
             return Err(Error::MissingCredentials);
@@ -103,35 +97,36 @@ impl KrakenClient {
 
         let url_path = format!("/{}/private/{}", self.version, method);
 
-        json_data.set_nonce(self.nonce()?);
+        let json_val = serde_json::to_value(json_data).map_err(Error::SerializingJson)?;
+        let (json_string, sig) = self.sign(json_val, &url_path)?;
 
         let mut headers = HeaderMap::new();
         headers.insert("API-Key", HeaderValue::from_str(&self.config.key)?);
-        headers.insert(
-            "API-Sign",
-            HeaderValue::from_str(&self.sign(&json_data, &url_path)?)?,
-        );
+        headers.insert("API-Sign", HeaderValue::from_str(&sig)?);
 
-        self.query(&url_path, headers, json_data)
+        self.query(&url_path, headers, json_string)
     }
 
-    /// Get a nonce as suggsted by Kraken
-    fn nonce(&self) -> Result<u64> {
-        Ok(SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|_| Error::TimeError)?
-            .as_millis() as u64)
-    }
-
-    /// Construct the payload signature using Kraken's scheme
-    fn sign<D: HasNonce + Serialize>(&self, json_data: &D, url_path: &str) -> Result<String> {
-        let nonce = json_data.get_nonce();
-        let json_bytes = serde_json::to_string(json_data).map_err(Error::SigningJson)?;
+    /// Serialize a json payload, adding a nonce, and producing a signature using Kraken's scheme
+    ///
+    /// Arguments:
+    /// * json_data for the request, with "nonce" value not yet assigned
+    /// * url path for the request
+    ///
+    /// Returns:
+    /// * json string corresponding to json_data + the nonce
+    /// * signature over that json string
+    fn sign(&self, mut json_data: Value, url_path: &str) -> Result<(String, String)> {
+        // Generate a nonce and set it in the json object, per kraken spec
+        let nonce = Self::nonce()?;
+        *json_data.get_mut("nonce").expect("expected json object") = json!(nonce);
+        // Conver the json to a string
+        let json_bytes = serde_json::to_string(&json_data).map_err(Error::SerializingJson)?;
 
         let sha2_result = {
             let mut hasher = Sha256::default();
             hasher.update(nonce.to_string());
-            hasher.update(json_bytes);
+            hasher.update(&json_bytes);
             hasher.finalize()
         };
 
@@ -143,7 +138,17 @@ impl KrakenClient {
         mac.update(url_path.as_bytes());
         mac.update(&sha2_result);
         let mac = mac.finalize().into_bytes();
-        Ok(base64::encode(&mac))
+
+        let sig = base64::encode(&mac);
+        Ok((json_bytes, sig))
+    }
+
+    /// Get a nonce as suggsted by Kraken
+    fn nonce() -> Result<u64> {
+        Ok(SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|_| Error::TimeError)?
+            .as_millis() as u64)
     }
 }
 
@@ -165,8 +170,8 @@ pub enum Error {
     MissingCredentials,
     /// Time error (preventing nonce computation)
     TimeError,
-    /// json error during signing: {0}
-    SigningJson(serde_json::Error),
+    /// json error during serialization: {0}
+    SerializingJson(serde_json::Error),
     /// base64 error during signing: {0}
     SigningB64(base64::DecodeError),
     /// Invalid header value: {0}

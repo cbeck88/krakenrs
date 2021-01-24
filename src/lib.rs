@@ -36,7 +36,7 @@ impl KrakenAPI {
         userref: Option<UserRefId>,
     ) -> Result<KrakenResult<HashMap<TxId, OrderInfo>>> {
         self.client
-            .query_private("GetOpenOrders", GetOpenOrdersRequest { nonce: 0, userref })
+            .query_private("GetOpenOrders", GetOpenOrdersRequest { userref })
     }
 }
 

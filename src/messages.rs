@@ -52,21 +52,17 @@ pub struct SystemStatusResponse {
 
 /// A possible status of the kraken trading system
 #[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum SystemStatus {
     /// Online
-    #[serde(rename = "online")]
     Online,
     /// Cancel Only (new orders cannot be created)
-    #[serde(rename = "cancel_only")]
     CancelOnly,
     /// Post Only (only new post limit orders can be created)
-    #[serde(rename = "post_only")]
     PostOnly,
     /// Limit Only (only new limit orders can be created)
-    #[serde(rename = "limit_only")]
     LimitOnly,
     /// Mainanence (system is offline for maintenance)
-    #[serde(rename = "maintenance")]
     Maintenance,
 }
 
@@ -133,19 +129,14 @@ pub enum OrderType {
 #[serde(rename_all = "kebab-case")]
 pub enum OrderStatus {
     /// Pending
-    #[serde(rename = "pending")]
     Pending,
     /// Open
-    #[serde(rename = "open")]
     Open,
     /// Closed
-    #[serde(rename = "closed")]
     Closed,
     /// Canceled
-    #[serde(rename = "canceled")]
     Canceled,
     /// Expired
-    #[serde(rename = "expired")]
     Expired,
 }
 
@@ -285,6 +276,7 @@ pub struct CancelOrderResponse {
     /// The number of orders canceled
     pub count: u64,
     /// if set, order(s) is/are pending cancellation
+    #[serde(default)]
     pub pending: bool,
 }
 

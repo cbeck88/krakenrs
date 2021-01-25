@@ -83,6 +83,12 @@ pub struct AssetInfo {
     pub display_decimals: u32,
 }
 
+/// Type alias for response of Assets API call
+pub type AssetsResponse = HashMap<String, AssetInfo>;
+
+/// Type alias for response of Balance API call
+pub type BalanceResponse = HashMap<String, String>;
+
 /// TxId are represented as String's in kraken json api
 pub type TxId = String;
 
@@ -264,4 +270,44 @@ pub struct GetOpenOrdersRequest {
 pub struct GetOpenOrdersResponse {
     /// The set of open orders, keyed by TxId
     pub open: HashMap<TxId, OrderInfo>,
+}
+
+/// Cancel order request
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct CancelOrderRequest {
+    /// The txid of the order to cancel. OR a userref id of orders to cancel
+    pub txid: String,
+}
+
+/// Cancel order response
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct CancelOrderResponse {
+    /// The number of orders canceled
+    pub count: u64,
+    /// if set, order(s) is/are pending cancellation
+    pub pending: bool,
+}
+
+/// Cancel all orders response
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct CancelAllOrdersResponse {
+    /// The number of orders canceled
+    pub count: u64,
+}
+
+/// Cancel all orders after request
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct CancelAllOrdersAfterRequest {
+    /// The timeout in seconds until all orders are canceled, unless the trigger is set again before then. 0 disables.
+    pub timeout: u64,
+}
+
+/// Cancel all orders after response
+#[derive(Default, Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct CancelAllOrdersAfterResponse {
+    /// The time when the request is handled (RFC 3339)
+    pub currentTime: String,
+    /// The time when the trigger is set for (RFC 3339)
+    pub triggerTime: String,
 }

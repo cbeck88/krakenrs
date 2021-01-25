@@ -9,7 +9,6 @@ mod messages;
 pub use messages::*;
 
 use core::convert::TryFrom;
-use std::collections::HashMap;
 
 /// A connection to the Kraken API
 /// This only supports blocking http requests for now
@@ -30,16 +29,54 @@ impl KrakenAPI {
         result.and_then(unpack_kraken_result)
     }
     /// (Public) Get the list of kraken's supported assets
-    pub fn assets(&mut self) -> Result<HashMap<String, AssetInfo>> {
-        let result: Result<KrakenResult<HashMap<String, AssetInfo>>> =
+    pub fn assets(&mut self) -> Result<AssetsResponse> {
+        let result: Result<KrakenResult<AssetsResponse>> =
             self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
+    /// (Private) Get the balance
+    pub fn get_account_balance(&mut self) -> Result<BalanceResponse> {
+        let result: Result<KrakenResult<BalanceResponse>> =
+            self.client.query_private("Balance", Empty {});
+        result.and_then(unpack_kraken_result)
+    }
     /// (Private) Get the list of open orders
+    ///
+    /// Arguments:
+    /// * userref: An optional user-reference to filter the list of open orders by
     pub fn get_open_orders(&mut self, userref: Option<UserRefId>) -> Result<GetOpenOrdersResponse> {
         let result: Result<KrakenResult<GetOpenOrdersResponse>> = self
             .client
             .query_private("OpenOrders", GetOpenOrdersRequest { userref });
+        result.and_then(unpack_kraken_result)
+    }
+    /// (Private) Cancel order
+    ///
+    /// Arguments:
+    /// * id: A TxId (OR a UserRefId) of order(s) to cancel
+    pub fn cancel_order(&mut self, id: String) -> Result<CancelOrderResponse> {
+        let result: Result<KrakenResult<CancelOrderResponse>> = self
+            .client
+            .query_private("CancelOrder", CancelOrderRequest { txid: id });
+        result.and_then(unpack_kraken_result)
+    }
+    /// (Private) Cancel all orders (regardless of user ref or tx id)
+    pub fn cancel_all_orders(&mut self) -> Result<CancelAllOrdersResponse> {
+        let result: Result<KrakenResult<CancelAllOrdersResponse>> =
+            self.client.query_private("CancelAll", Empty {});
+        result.and_then(unpack_kraken_result)
+    }
+    /// (Private) Cancel all orders after
+    ///
+    /// Arguments:
+    /// * timeout: Integer timeout specified in seconds. 0 to disable the timer.
+    pub fn cancel_all_orders_after(
+        &mut self,
+        timeout: u64,
+    ) -> Result<CancelAllOrdersAfterResponse> {
+        let result: Result<KrakenResult<CancelAllOrdersAfterResponse>> = self
+            .client
+            .query_private("CancelOrder", CancelAllOrdersAfterRequest { timeout });
         result.and_then(unpack_kraken_result)
     }
 }

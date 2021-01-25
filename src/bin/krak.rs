@@ -27,8 +27,16 @@ enum Command {
     SystemStatus,
     /// Get kraken's asset list
     Assets,
+    /// Get account balance
+    GetBalance,
     /// Get open orders list
     GetOpenOrders,
+    /// Cancel order: {id}
+    CancelOrder { id: String },
+    /// Cancel all orders
+    CancelAllOrders,
+    /// Cancel all orders after: {timeout}
+    CancelAllOrdersAfter { timeout: u64 },
 }
 
 /// Logs a "pretty printed" json structure on stdout
@@ -82,10 +90,29 @@ fn main() {
             let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
             log_value(&sorted_result);
         }
+        Command::GetBalance => {
+            let result = api.get_account_balance().expect("api call failed");
+            let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
+            log_value(&sorted_result);
+        }
         Command::GetOpenOrders => {
             let result = api.get_open_orders(None).expect("api call failed");
             let sorted_result = result.open.into_iter().collect::<BTreeMap<_, _>>();
             log_value(&sorted_result);
+        }
+        Command::CancelOrder { id } => {
+            let result = api.cancel_order(id).expect("api call failed");
+            log_value(&result);
+        }
+        Command::CancelAllOrders => {
+            let result = api.cancel_all_orders().expect("api call failed");
+            log_value(&result);
+        }
+        Command::CancelAllOrdersAfter { timeout } => {
+            let result = api
+                .cancel_all_orders_after(timeout)
+                .expect("api call failed");
+            log_value(&result);
         }
     }
 }

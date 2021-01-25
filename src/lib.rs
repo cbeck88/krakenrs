@@ -19,24 +19,28 @@ pub struct KrakenAPI {
 
 impl KrakenAPI {
     /// Get the kraken system's time
-    pub fn time(&mut self) -> Result<KrakenResult<Time>> {
-        self.client.query_public("Time", Empty {})
+    pub fn time(&mut self) -> Result<Time> {
+        let result: Result<KrakenResult<Time>> = self.client.query_public("Time", Empty {});
+        result.and_then(unpack_kraken_result)
     }
     /// Get the kraken system's status
-    pub fn system_status(&mut self) -> Result<KrakenResult<SystemStatus>> {
-        self.client.query_public("SystemStatus", Empty {})
+    pub fn system_status(&mut self) -> Result<SystemStatus> {
+        let result: Result<KrakenResult<SystemStatus>> =
+            self.client.query_public("SystemStatus", Empty {});
+        result.and_then(unpack_kraken_result)
     }
     /// Get the list of kraken's supported assets
-    pub fn assets(&mut self) -> Result<KrakenResult<HashMap<String, AssetInfo>>> {
-        self.client.query_public("Assets", Empty {})
+    pub fn assets(&mut self) -> Result<HashMap<String, AssetInfo>> {
+        let result: Result<KrakenResult<HashMap<String, AssetInfo>>> =
+            self.client.query_public("Assets", Empty {});
+        result.and_then(unpack_kraken_result)
     }
     /// Get the list of open orders
-    pub fn get_open_orders(
-        &mut self,
-        userref: Option<UserRefId>,
-    ) -> Result<KrakenResult<HashMap<TxId, OrderInfo>>> {
-        self.client
-            .query_private("GetOpenOrders", GetOpenOrdersRequest { userref })
+    pub fn get_open_orders(&mut self, userref: Option<UserRefId>) -> Result<GetOpenOrdersResponse> {
+        let result: Result<KrakenResult<GetOpenOrdersResponse>> = self
+            .client
+            .query_private("OpenOrders", GetOpenOrdersRequest { userref });
+        result.and_then(unpack_kraken_result)
     }
 }
 

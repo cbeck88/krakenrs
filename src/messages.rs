@@ -1,18 +1,31 @@
 //! Structures representing json schema sent to and from Kraken
 
+use crate::{Error, Result};
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Kraken responds to APIs with a json body consisting of "error:" and "result:" fields.
 /// The error part is an array of strings encoded as:
 /// <char-severity code><string-error category>:<string-error type>[:<string-extra info>]
 /// The result part is a json object or array
 #[derive(Debug, Serialize, Deserialize)]
-pub struct KrakenResult<Result: Serialize> {
+pub struct KrakenResult<ResultJson: Serialize> {
     /// Kraken API returns error strings in an array marked "error"
     pub error: Vec<String>,
     /// Kraken API returns results here, separated from error
-    pub result: Result,
+    /// Sometimes result is omitted if errors occured.
+    pub result: Option<ResultJson>,
+}
+
+/// Convert KrakenResult<T> to Result<T>
+pub fn unpack_kraken_result<ResultJson: Serialize>(
+    src: KrakenResult<ResultJson>,
+) -> Result<ResultJson> {
+    if !src.error.is_empty() {
+        return Err(Error::KrakenErrors(src.error));
+    }
+    src.result.ok_or(Error::MissingResultJson)
 }
 
 /// Empty json object (used as arguments for some APIs)
@@ -122,25 +135,25 @@ pub struct OrderInfo {
     /// Status of the order
     pub status: OrderStatus,
     /// unix timestamp of when the order was placed
-    pub opentm: u64,
+    pub opentm: f64,
     /// unix timestamp of order start time (or 0 if not set)
     #[serde(default)]
-    pub starttm: u64,
+    pub starttm: f64,
     /// unix timestamp of order end time (or 0 if not set)
     #[serde(default)]
-    pub expiretm: u64,
+    pub expiretm: f64,
     /// order description info
     pub descr: OrderDescriptionInfo,
     /// volume of order (base currency unless viqc set in oflags)
-    pub vol: f64,
+    pub vol: String,
     /// volume executed (base currency unless viqc set in oflags)
-    pub vol_exec: f64,
+    pub vol_exec: String,
     /// total cost (quote currency unless unless viqc set in oflags)
-    pub cost: f64,
+    pub cost: String,
     /// total fee (quote currency)
-    pub fee: f64,
+    pub fee: String,
     /// average price (quote currency unless viqc set in oflags)
-    pub price: f64,
+    pub price: String,
 }
 
 /// Order-description-info used in Order APIs and AddStandardOrder API
@@ -154,9 +167,13 @@ pub struct OrderDescriptionInfo {
     /// order type
     pub ordertype: OrderType,
     /// primary price
-    pub price: f64,
+    pub price: String,
     /// secondary price
-    pub price2: f64,
+    pub price2: String,
+    /// leverage
+    pub leverage: String,
+    /// human-readable description
+    pub order: String,
 }
 
 /// Get open orders request
@@ -164,4 +181,11 @@ pub struct OrderDescriptionInfo {
 pub struct GetOpenOrdersRequest {
     /// restrict results to given user reference id (optional)
     pub userref: Option<UserRefId>,
+}
+
+/// Get open orders response
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct GetOpenOrdersResponse {
+    /// The set of open orders, keyed by TxId
+    pub open: HashMap<TxId, OrderInfo>,
 }

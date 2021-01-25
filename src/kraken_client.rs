@@ -9,15 +9,37 @@ use reqwest::{
     header::{HeaderMap, HeaderValue, InvalidHeaderValue},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::{json, Value};
 use sha2::{Digest, Sha256, Sha512};
-use std::{convert::TryFrom, str::FromStr, time::SystemTime};
+use std::{
+    convert::TryFrom,
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 use url::{ParseError as UrlParseError, Url};
 
 /// Configuration needed to initialize a Kraken client.
-/// The key and secret aren't needed if only public APIs are used
-#[derive(Default, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// The credentials aren't needed if only public APIs are used
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct KrakenClientConfig {
+    /// The timeout to use for http connections
+    /// Recommended is to use 30s.
+    pub timeout: Duration,
+    /// The credentials (if using private APIs)
+    pub creds: KrakenCredentials,
+}
+
+impl Default for KrakenClientConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::new(30, 0),
+            creds: Default::default(),
+        }
+    }
+}
+
+/// Credentials needed to use private Kraken APIs.
+#[derive(Default, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct KrakenCredentials {
     /// The name of the API key
     pub key: String,
     /// The API key secret
@@ -26,11 +48,18 @@ pub struct KrakenClientConfig {
 
 /// A low-level https connection to kraken that can execute public or private methods.
 pub struct KrakenClient {
+    /// Http client
     client: reqwest::blocking::Client,
+    /// Our configuration
     config: KrakenClientConfig,
+    /// Base url to contact kraken at
     base_url: Url,
+    /// Kraken Api version to connect to
     version: u16,
 }
+
+// KrakenRS version
+const KRAKEN_RS_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
 impl TryFrom<KrakenClientConfig> for KrakenClient {
     type Error = Error;
@@ -38,7 +67,11 @@ impl TryFrom<KrakenClientConfig> for KrakenClient {
         let base_url = Url::from_str("https://api.kraken.com/")?;
         let version = 0;
         let client = reqwest::blocking::ClientBuilder::new()
-            .user_agent("krakenrs/0.0")
+            .user_agent(format!(
+                "krakenrs/{}",
+                KRAKEN_RS_VERSION.unwrap_or("unknown")
+            ))
+            .timeout(Some(config.timeout))
             .build()?;
         Ok(Self {
             base_url,
@@ -50,11 +83,52 @@ impl TryFrom<KrakenClientConfig> for KrakenClient {
 }
 
 impl KrakenClient {
+    /// Change the credentials used
+    pub fn set_creds(&mut self, creds: KrakenCredentials) {
+        self.config.creds = creds;
+    }
+
+    /// Execute a public API, given method, and object matching the expected schema, and returning expected schema or an error.
+    pub fn query_public<D: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        query_data: D,
+    ) -> Result<R> {
+        let url_path = format!("/{}/public/{}", self.version, method);
+
+        let post_data = serde_qs::to_string(&query_data)?;
+
+        self.query(&url_path, HeaderMap::new(), post_data)
+    }
+
+    /// Execute a private API, given method, and object matching the expected schema, and returning expected schema or an error.
+    pub fn query_private<D: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        query_data: D,
+    ) -> Result<R> {
+        if self.config.creds.key.is_empty() || self.config.creds.secret.is_empty() {
+            return Err(Error::MissingCredentials);
+        }
+
+        let url_path = format!("/{}/private/{}", self.version, method);
+
+        // Sign the query data and url path, resulting in encoded post_data with nonce, and a signature.
+        let (post_data, sig) = self.sign(query_data, &url_path)?;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("API-Key", HeaderValue::from_str(&self.config.creds.key)?);
+        headers.insert("API-Sign", HeaderValue::from_str(&sig)?);
+
+        self.query(&url_path, headers, post_data)
+    }
+
+    /// Send a query (public or private) to kraken API, and interpret response as JSON
     fn query<R: DeserializeOwned>(
         &mut self,
         url_path: &str,
         headers: HeaderMap,
-        json_string: String,
+        post_data: String,
     ) -> Result<R> {
         let url = self.base_url.join(url_path)?;
 
@@ -62,75 +136,48 @@ impl KrakenClient {
             .client
             .post(url)
             .headers(headers)
-            .body(json_string)
+            .body(post_data)
             .send()?;
         if !(response.status() == 200 || response.status() == 201 || response.status() == 202) {
             return Err(Error::BadStatus(response));
         }
 
-        let result: R = response.json().map_err(Error::Json)?;
+        let text = response.text()?;
+
+        let result: R =
+            serde_json::from_str(&text).map_err(|err| Error::Json(err, text.clone()))?;
         Ok(result)
-    }
-
-    /// Execute a public API, given method, and object matching the expected schema, and returning expected schema or an error.
-    pub fn query_public<D: Serialize, R: DeserializeOwned>(
-        &mut self,
-        method: &str,
-        json_data: D,
-    ) -> Result<R> {
-        let url_path = format!("/{}/public/{}", self.version, method);
-
-        let json_string = serde_json::to_string(&json_data).map_err(Error::SerializingJson)?;
-
-        self.query(&url_path, HeaderMap::new(), json_string)
-    }
-
-    /// Execute a private API, given method, and object matching the expected schema, and returning expected schema or an error.
-    pub fn query_private<D: Serialize, R: DeserializeOwned>(
-        &mut self,
-        method: &str,
-        json_data: D,
-    ) -> Result<R> {
-        if self.config.key.is_empty() || self.config.secret.is_empty() {
-            return Err(Error::MissingCredentials);
-        }
-
-        let url_path = format!("/{}/private/{}", self.version, method);
-
-        let json_val = serde_json::to_value(json_data).map_err(Error::SerializingJson)?;
-        let (json_string, sig) = self.sign(json_val, &url_path)?;
-
-        let mut headers = HeaderMap::new();
-        headers.insert("API-Key", HeaderValue::from_str(&self.config.key)?);
-        headers.insert("API-Sign", HeaderValue::from_str(&sig)?);
-
-        self.query(&url_path, headers, json_string)
     }
 
     /// Serialize a json payload, adding a nonce, and producing a signature using Kraken's scheme
     ///
     /// Arguments:
-    /// * json_data for the request, with "nonce" value not yet assigned
+    /// * query_data for the request, with "nonce" value not yet assigned
     /// * url path for the request
     ///
     /// Returns:
-    /// * json string corresponding to json_data + the nonce
-    /// * signature over that json string
-    fn sign(&self, mut json_data: Value, url_path: &str) -> Result<(String, String)> {
-        // Generate a nonce and set it in the json object, per kraken spec
+    /// * post_data for the request (encoded query data, with nonce added)
+    /// * signature over that post data string
+    fn sign<D: Serialize>(&self, query_data: D, url_path: &str) -> Result<(String, String)> {
+        // Generate a nonce to become part of the postdata
         let nonce = Self::nonce()?;
-        *json_data.get_mut("nonce").expect("expected json object") = json!(nonce);
-        // Conver the json to a string
-        let json_bytes = serde_json::to_string(&json_data).map_err(Error::SerializingJson)?;
+        // Convert the data to a query string
+        let qs = serde_qs::to_string(&query_data)?;
+        // Append nonce to query string
+        let post_data = if qs.is_empty() {
+            format!("nonce={}", nonce)
+        } else {
+            format!("nonce={}&{}", nonce, qs)
+        };
 
         let sha2_result = {
             let mut hasher = Sha256::default();
             hasher.update(nonce.to_string());
-            hasher.update(&json_bytes);
+            hasher.update(&post_data);
             hasher.finalize()
         };
 
-        let hmac_sha_key = base64::decode(&self.config.key).map_err(Error::SigningB64)?;
+        let hmac_sha_key = base64::decode(&self.config.creds.secret).map_err(Error::SigningB64)?;
 
         type HmacSha = Hmac<Sha512>;
         let mut mac =
@@ -140,7 +187,7 @@ impl KrakenClient {
         let mac = mac.finalize().into_bytes();
 
         let sig = base64::encode(&mac);
-        Ok((json_bytes, sig))
+        Ok((post_data, sig))
     }
 
     /// Get a nonce as suggsted by Kraken
@@ -164,14 +211,18 @@ pub enum Error {
     Reqwest(reqwest::Error),
     /// kraken returned bad status: {0:?}
     BadStatus(Response),
-    /// json deserialization failed: {0}
-    Json(reqwest::Error),
+    /// json deserialization failed: {0}, body was: {1}
+    Json(serde_json::Error, String),
+    /// Kraken errors present: {0:?}
+    KrakenErrors(Vec<String>),
+    /// Missing result json
+    MissingResultJson,
     /// Missing credentials required for private APIs
     MissingCredentials,
     /// Time error (preventing nonce computation)
     TimeError,
-    /// json error during serialization: {0}
-    SerializingJson(serde_json::Error),
+    /// Error serializing query string: {0}
+    SerializingQs(serde_qs::Error),
     /// base64 error during signing: {0}
     SigningB64(base64::DecodeError),
     /// Invalid header value: {0}
@@ -193,5 +244,11 @@ impl From<reqwest::Error> for Error {
 impl From<InvalidHeaderValue> for Error {
     fn from(src: InvalidHeaderValue) -> Self {
         Self::InvalidHeader(src)
+    }
+}
+
+impl From<serde_qs::Error> for Error {
+    fn from(src: serde_qs::Error) -> Self {
+        Self::SerializingQs(src)
     }
 }

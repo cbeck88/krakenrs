@@ -18,24 +18,24 @@ pub struct KrakenAPI {
 }
 
 impl KrakenAPI {
-    /// Get the kraken system's time
-    pub fn time(&mut self) -> Result<Time> {
-        let result: Result<KrakenResult<Time>> = self.client.query_public("Time", Empty {});
+    /// (Public) Get the kraken system's time
+    pub fn time(&mut self) -> Result<TimeResponse> {
+        let result: Result<KrakenResult<TimeResponse>> = self.client.query_public("Time", Empty {});
         result.and_then(unpack_kraken_result)
     }
-    /// Get the kraken system's status
-    pub fn system_status(&mut self) -> Result<SystemStatus> {
-        let result: Result<KrakenResult<SystemStatus>> =
+    /// (Public) Get the kraken system's status
+    pub fn system_status(&mut self) -> Result<SystemStatusResponse> {
+        let result: Result<KrakenResult<SystemStatusResponse>> =
             self.client.query_public("SystemStatus", Empty {});
         result.and_then(unpack_kraken_result)
     }
-    /// Get the list of kraken's supported assets
+    /// (Public) Get the list of kraken's supported assets
     pub fn assets(&mut self) -> Result<HashMap<String, AssetInfo>> {
         let result: Result<KrakenResult<HashMap<String, AssetInfo>>> =
             self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
-    /// Get the list of open orders
+    /// (Private) Get the list of open orders
     pub fn get_open_orders(&mut self, userref: Option<UserRefId>) -> Result<GetOpenOrdersResponse> {
         let result: Result<KrakenResult<GetOpenOrdersResponse>> = self
             .client

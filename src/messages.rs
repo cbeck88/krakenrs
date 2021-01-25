@@ -3,7 +3,9 @@
 use crate::{Error, Result};
 use displaydoc::Display;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde_with::CommaSeparator;
+use std::collections::{BTreeSet, HashMap};
+use std::str::FromStr;
 
 /// Kraken responds to APIs with a json body consisting of "error:" and "result:" fields.
 /// The error part is an array of strings encoded as:
@@ -34,18 +36,38 @@ pub struct Empty {}
 
 /// Result of kraken public "Time" API call
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Time {
+pub struct TimeResponse {
     /// Unix time stamp (seconds since epoch)
     pub unixtime: u64,
 }
 
 /// Result of kraken public "SystemStatus" API call
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SystemStatus {
+pub struct SystemStatusResponse {
     /// Status of kraken's trading system
-    pub status: String,
+    pub status: SystemStatus,
     /// Time that this was the status (format: 2021-01-20T20:39:22Z)
     pub timestamp: String,
+}
+
+/// A possible status of the kraken trading system
+#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+pub enum SystemStatus {
+    /// Online
+    #[serde(rename = "online")]
+    Online,
+    /// Cancel Only (new orders cannot be created)
+    #[serde(rename = "cancel_only")]
+    CancelOnly,
+    /// Post Only (only new post limit orders can be created)
+    #[serde(rename = "post_only")]
+    PostOnly,
+    /// Limit Only (only new limit orders can be created)
+    #[serde(rename = "limit_only")]
+    LimitOnly,
+    /// Mainanence (system is offline for maintenance)
+    #[serde(rename = "maintenance")]
+    Maintenance,
 }
 
 /// (Substructure within) Result of kraken public "Assets" API call
@@ -69,46 +91,40 @@ pub type UserRefId = i32;
 
 /// Type (buy/sell)
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize)]
+#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub enum Type {
     /// Buy
-    #[serde(rename = "buy")]
     Buy,
     /// Sell
-    #[serde(rename = "sell")]
     Sell,
 }
 
 /// Possible order types in Kraken.
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize)]
+#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub enum OrderType {
     /// Market
-    #[serde(rename = "market")]
     Market,
     /// Limit
-    #[serde(rename = "limit")]
     Limit,
     /// Stop-Loss
-    #[serde(rename = "stop-loss")]
     StopLoss,
     /// Take-Profit
-    #[serde(rename = "take-profit")]
     TakeProfit,
     /// Stop-Loss-Limit
-    #[serde(rename = "stop-loss-limit")]
     StopLossLimit,
     /// Take-Profit-Limit
-    #[serde(rename = "take-profit-limit")]
     TakeProfitLimit,
     /// Settle-Position
-    #[serde(rename = "settle-position")]
     SettlePosition,
 }
 
 /// Possible order statuses in Kraken.
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize)]
+#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 pub enum OrderStatus {
     /// Pending
     #[serde(rename = "pending")]
@@ -154,6 +170,66 @@ pub struct OrderInfo {
     pub fee: String,
     /// average price (quote currency unless viqc set in oflags)
     pub price: String,
+    /// order flags (comma separated list)
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    pub oflags: BTreeSet<OrderFlag>,
+    /// misc info (comma separated list)
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    pub misc: BTreeSet<MiscInfo>,
+}
+
+/// Possible order flags in Kraken.
+/// These are options in a comma-separated list
+#[derive(Debug, Display, Ord, PartialOrd, Eq, PartialEq)]
+pub enum OrderFlag {
+    /// viqc
+    Viqc,
+    /// fcib
+    Fcib,
+    /// fciq
+    Fciq,
+    /// nompp
+    Nompp,
+}
+
+impl FromStr for OrderFlag {
+    type Err = &'static str;
+    fn from_str(src: &str) -> core::result::Result<OrderFlag, Self::Err> {
+        match src {
+            "viqc" => Ok(OrderFlag::Viqc),
+            "fcib" => Ok(OrderFlag::Fcib),
+            "fciq" => Ok(OrderFlag::Fciq),
+            "nompp" => Ok(OrderFlag::Nompp),
+            _ => Err("unknown OrderFlag"),
+        }
+    }
+}
+
+/// Possible miscellaneous info flags in Kraken.
+/// These are options in a comma-separated list
+#[derive(Debug, Display, Ord, PartialOrd, Eq, PartialEq)]
+pub enum MiscInfo {
+    /// stopped
+    Stopped,
+    /// touched
+    Touched,
+    /// liquidated
+    Liquidated,
+    /// partial
+    PartialFill,
+}
+
+impl FromStr for MiscInfo {
+    type Err = &'static str;
+    fn from_str(src: &str) -> core::result::Result<MiscInfo, Self::Err> {
+        match src {
+            "stopped" => Ok(MiscInfo::Stopped),
+            "touched" => Ok(MiscInfo::Touched),
+            "liquidated" => Ok(MiscInfo::Liquidated),
+            "partial" => Ok(MiscInfo::PartialFill),
+            _ => Err("unknown MiscInfo"),
+        }
+    }
 }
 
 /// Order-description-info used in Order APIs and AddStandardOrder API

@@ -296,10 +296,11 @@ pub struct CancelAllOrdersAfterRequest {
 
 /// Cancel all orders after response
 #[derive(Default, Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
 pub struct CancelAllOrdersAfterResponse {
     /// The time when the request is handled (RFC 3339)
-    pub currentTime: String,
+    #[serde(rename = "currentTime")]
+    pub current_time: String,
     /// The time when the trigger is set for (RFC 3339)
-    pub triggerTime: String,
+    #[serde(rename = "triggerTime")]
+    pub trigger_time: String,
 }

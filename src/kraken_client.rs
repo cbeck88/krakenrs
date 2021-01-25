@@ -132,6 +132,8 @@ impl KrakenClient {
     ) -> Result<R> {
         let url = self.base_url.join(url_path)?;
 
+        //eprintln!("POST {}\n{}", url_path, post_data);
+
         let response = self
             .client
             .post(url)

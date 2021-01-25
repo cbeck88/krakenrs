@@ -74,9 +74,10 @@ impl KrakenAPI {
         &mut self,
         timeout: u64,
     ) -> Result<CancelAllOrdersAfterResponse> {
-        let result: Result<KrakenResult<CancelAllOrdersAfterResponse>> = self
-            .client
-            .query_private("CancelOrder", CancelAllOrdersAfterRequest { timeout });
+        let result: Result<KrakenResult<CancelAllOrdersAfterResponse>> = self.client.query_private(
+            "CancelAllOrdersAfter",
+            CancelAllOrdersAfterRequest { timeout },
+        );
         result.and_then(unpack_kraken_result)
     }
 }

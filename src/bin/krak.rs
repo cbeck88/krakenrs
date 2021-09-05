@@ -27,6 +27,8 @@ enum Command {
     SystemStatus,
     /// Get kraken's asset list
     Assets,
+    /// Get kraken's asset pairs info: {pairs:?}
+    AssetPairs { pairs: Vec<String> },
     /// Get account balance
     GetBalance,
     /// Get open orders list
@@ -87,6 +89,11 @@ fn main() {
         }
         Command::Assets => {
             let result = api.assets().expect("api call failed");
+            let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
+            log_value(&sorted_result);
+        }
+        Command::AssetPairs { pairs } => {
+            let result = api.asset_pairs(pairs).expect("api call failed");
             let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
             log_value(&sorted_result);
         }

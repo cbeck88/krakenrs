@@ -97,6 +97,7 @@ impl KrakenClient {
         let url_path = format!("/{}/public/{}", self.version, method);
 
         let post_data = serde_qs::to_string(&query_data)?;
+        //eprintln!("post_data = {}", post_data);
 
         self.query(&url_path, HeaderMap::new(), post_data)
     }

@@ -82,6 +82,43 @@ pub struct AssetInfo {
 /// Type alias for response of Assets API call
 pub type AssetsResponse = HashMap<String, AssetInfo>;
 
+/// A query object to kraken public "AssetPairs" API call
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct AssetPairsRequest {
+    /// A comma-separated list of kraken asset pair strings
+    pub pair: String,
+}
+
+/// (Substructure within) Result of kraken public "Asset Pairs" API call
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AssetPair {
+    /// Alternate pair name
+    pub alt_name: Option<String>,
+    /// Web-sockets pair name (if available)
+    pub ws_name: Option<String>,
+    /// Asset class of base component
+    pub aclass_base: String,
+    /// Asset id of base component
+    pub base: String,
+    /// Asset class of quote component
+    pub aclass_quote: String,
+    /// Asset id of quote component
+    pub quote: String,
+    /// Scaling decimal places for pair
+    pub pair_decimals: u64,
+    /// Scaling decimal places for volume
+    pub lot_decimals: u64,
+    /// Amount to multiply lot volume by to get currency volume
+    pub lot_multiplier: u64,
+    /// Fee schedule array in [volume, percent] tuples
+    pub fees: Vec<Vec<f64>>,
+    /// Minimum order size (in terms of base currency)
+    pub ordermin: Option<String>,
+}
+
+/// Type alias for response of AssetPairs API call
+pub type AssetPairsResponse = HashMap<String, AssetPair>;
+
 /// Type alias for response of Balance API call
 pub type BalanceResponse = HashMap<String, String>;
 

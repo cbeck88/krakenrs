@@ -34,6 +34,23 @@ impl KrakenAPI {
             self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
+    /// (Public) Get the list of kraken's supported assets
+    ///
+    /// Arguments:
+    /// * pairs: A list of Kraken asset pair strings to get info about
+    pub fn asset_pairs(&mut self, pairs: Vec<String>) -> Result<AssetPairsResponse> {
+        let result: Result<KrakenResult<AssetPairsResponse>> = if pairs.is_empty() {
+            self.client.query_public("AssetPairs", Empty {})
+        } else {
+            self.client.query_public(
+                "AssetPairs",
+                AssetPairsRequest {
+                    pair: pairs.join(","),
+                },
+            )
+        };
+        result.and_then(unpack_kraken_result)
+    }
     /// (Private) Get the balance
     pub fn get_account_balance(&mut self) -> Result<BalanceResponse> {
         let result: Result<KrakenResult<BalanceResponse>> =

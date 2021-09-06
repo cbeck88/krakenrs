@@ -119,6 +119,27 @@ pub struct AssetPair {
 /// Type alias for response of AssetPairs API call
 pub type AssetPairsResponse = HashMap<String, AssetPair>;
 
+/// A query object to kraken public "Ticker" API call
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct TickerRequest {
+    /// A comma-separated list of kraken asset pair strings
+    pub pair: String,
+}
+
+/// (Substructure within) Result of kraken public "Ticker" API call
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AssetTickerInfo {
+    /// Ask `[price, whole lot volume, lot volume]`
+    pub a: Vec<String>,
+    /// Bid `[price, whole lot volume, lot volume]`
+    pub b: Vec<String>,
+    /// Closed `[price, lot volume]`
+    pub c: Vec<String>,
+}
+
+/// Type alias for response of Ticker API call
+pub type TickerResponse = HashMap<String, AssetTickerInfo>;
+
 /// Type alias for response of Balance API call
 pub type BalanceResponse = HashMap<String, String>;
 

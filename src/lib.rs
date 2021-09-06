@@ -51,6 +51,19 @@ impl KrakenAPI {
         };
         result.and_then(unpack_kraken_result)
     }
+    /// (Public) Get the ticker price for one or more asset pairs
+    ///
+    /// Arguments:
+    /// * pairs: A list of Kraken asset pair strings to get ticker info about
+    pub fn ticker(&mut self, pairs: Vec<String>) -> Result<TickerResponse> {
+        let result: Result<KrakenResult<TickerResponse>> = self.client.query_public(
+            "Ticker",
+            TickerRequest {
+                pair: pairs.join(","),
+            },
+        );
+        result.and_then(unpack_kraken_result)
+    }
     /// (Private) Get the balance
     pub fn get_account_balance(&mut self) -> Result<BalanceResponse> {
         let result: Result<KrakenResult<BalanceResponse>> =

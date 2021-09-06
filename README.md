@@ -1,7 +1,10 @@
 krakenrs
 ========
 
-A (WIP) Kraken API client in Rust.
+A Kraken API client in Rust.
+
+This library provides a Rust client object implementing many of the calls from the [Kraken REST API](https://docs.kraken.com/rest/)
+with an idiomatic Rust interface.
 
 - Requests and responses are strongly-typed, conversion done using [`serde_json`](https://docs.serde.rs/serde_json/)
 - [`reqwest`](https://docs.rs/reqwest/0.11.0/reqwest/) is used for https
@@ -10,6 +13,11 @@ A (WIP) Kraken API client in Rust.
 
 Public and private APIs are supported, but not all the options are exposed.
 If something you need is missing, pull requests are welcome!
+
+Disclaimer
+----------
+
+Use at your own risk. If you build a bot using this and you suffer a loss because of a bug, I am not responsible.
 
 Running demo functionality
 --------------------------
@@ -22,7 +30,8 @@ Usage:
 - Build everything: `cargo build`.
 - Run `./target/debug/krak --help` for usage information.
   For example, you can see the trading system's current status with
-  `./target/debug/krak system-status`.
+  `./krak system-status`, or see asset pairs and current prices with
+  `./krak asset-pairs`, `./krak ticker`
 - If you want to use private APIs, go to your Kraken account and create an API key.
   Then create a json file with your credentials, with the following schema:
   ```

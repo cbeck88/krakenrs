@@ -1,8 +1,13 @@
 [package]
 name = "krakenrs"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Chris Beck <beck.ct@gmail.com>"]
 edition = "2018"
+readme = "README.md"
+description = "Rust bindings to the Kraken REST API"
+license = "WTFPL"
+categories = ["web-programming::http-client"]
+repository = "https://github.com/garbageslam/krakenrs"
 
 [lib]
 name = "krakenrs"

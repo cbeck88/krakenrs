@@ -1,9 +1,11 @@
 use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
-use krakenrs::{KrakenAPI, KrakenClientConfig, KrakenCredentials};
+use krakenrs::{
+    BsType, KrakenAPI, KrakenClientConfig, KrakenCredentials, LimitOrder, MarketOrder, OrderFlag,
+};
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -16,6 +18,10 @@ struct KrakConfig {
     /// Credentials file, formatted in json. Required only for private APIs
     #[structopt(parse(from_os_str))]
     creds: Option<PathBuf>,
+
+    /// Whether to pass "validate = true" with any orders (for testing)
+    #[structopt(short, long)]
+    validate: bool,
 }
 
 /// Commands supported by krak executable
@@ -41,6 +47,22 @@ enum Command {
     CancelAllOrders,
     /// Cancel all orders after: {timeout}
     CancelAllOrdersAfter { timeout: u64 },
+    /// Market buy order: {volume} {pair}
+    MarketBuy { volume: String, pair: String },
+    /// Market sell order: {volume} {pair}
+    MarketSell { volume: String, pair: String },
+    /// Limit buy order: {volume} {pair} @ {price}
+    LimitBuy {
+        volume: String,
+        pair: String,
+        price: String,
+    },
+    /// Limit sell order: {volume} {pair} @ {price}
+    LimitSell {
+        volume: String,
+        pair: String,
+        price: String,
+    },
 }
 
 /// Logs a "pretty printed" json structure on stdout
@@ -125,6 +147,80 @@ fn main() {
         Command::CancelAllOrdersAfter { timeout } => {
             let result = api
                 .cancel_all_orders_after(timeout)
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::MarketBuy { volume, pair } => {
+            let result = api
+                .add_market_order(
+                    MarketOrder {
+                        bs_type: BsType::Buy,
+                        volume,
+                        pair,
+                        oflags: Default::default(),
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::MarketSell { volume, pair } => {
+            let result = api
+                .add_market_order(
+                    MarketOrder {
+                        bs_type: BsType::Sell,
+                        volume,
+                        pair,
+                        oflags: Default::default(),
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::LimitBuy {
+            volume,
+            pair,
+            price,
+        } => {
+            let mut oflags = BTreeSet::new();
+            oflags.insert(OrderFlag::Post);
+            let result = api
+                .add_limit_order(
+                    LimitOrder {
+                        bs_type: BsType::Buy,
+                        volume,
+                        pair,
+                        price,
+                        oflags,
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::LimitSell {
+            volume,
+            pair,
+            price,
+        } => {
+            let mut oflags = BTreeSet::new();
+            oflags.insert(OrderFlag::Post);
+            let result = api
+                .add_limit_order(
+                    LimitOrder {
+                        bs_type: BsType::Sell,
+                        volume,
+                        pair,
+                        price,
+                        oflags,
+                    },
+                    None,
+                    config.validate,
+                )
                 .expect("api call failed");
             log_value(&result);
         }

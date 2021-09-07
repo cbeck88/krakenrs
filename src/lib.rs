@@ -6,9 +6,47 @@ mod kraken_client;
 pub use kraken_client::*;
 
 mod messages;
-pub use messages::*;
+use messages::{
+    unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest,
+    CancelOrderRequest, Empty, GetOpenOrdersRequest, KrakenResult, TickerRequest,
+};
+pub use messages::{
+    AddOrderResponse, AssetPairsResponse, AssetsResponse, BalanceResponse, BsType,
+    CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse,
+    GetOpenOrdersResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType,
+    SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+};
 
 use core::convert::TryFrom;
+use std::collections::BTreeSet;
+
+/// A description of a market order to place
+#[derive(Debug, Clone)]
+pub struct MarketOrder {
+    /// Whether to buy or sell
+    pub bs_type: BsType,
+    /// Volume (in lots)
+    pub volume: String,
+    /// Asset pair
+    pub pair: String,
+    /// Order flags (market price protection etc.)
+    pub oflags: BTreeSet<OrderFlag>,
+}
+
+/// A description of a limit order to place
+#[derive(Debug, Clone)]
+pub struct LimitOrder {
+    /// Whether to buy or sell
+    pub bs_type: BsType,
+    /// Volume (in lots)
+    pub volume: String,
+    /// Asset pair
+    pub pair: String,
+    /// Price
+    pub price: String,
+    /// Order flags (post-only etc.)
+    pub oflags: BTreeSet<OrderFlag>,
+}
 
 /// A connection to the Kraken API
 /// This only supports blocking http requests for now
@@ -28,27 +66,23 @@ impl KrakenAPI {
             self.client.query_public("SystemStatus", Empty {});
         result.and_then(unpack_kraken_result)
     }
-    /// (Public) Get the list of kraken's supported assets
+    /// (Public) Get the list of kraken's supported assets, and info
     pub fn assets(&mut self) -> Result<AssetsResponse> {
         let result: Result<KrakenResult<AssetsResponse>> =
             self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
-    /// (Public) Get the list of kraken's supported assets
+    /// (Public) Get the list of kraken's asset pairs, and info
     ///
     /// Arguments:
-    /// * pairs: A list of Kraken asset pair strings to get info about
+    /// * pairs: A list of Kraken asset pair strings to get info about. If empty then all asset pairs
     pub fn asset_pairs(&mut self, pairs: Vec<String>) -> Result<AssetPairsResponse> {
-        let result: Result<KrakenResult<AssetPairsResponse>> = if pairs.is_empty() {
-            self.client.query_public("AssetPairs", Empty {})
-        } else {
-            self.client.query_public(
-                "AssetPairs",
-                AssetPairsRequest {
-                    pair: pairs.join(","),
-                },
-            )
-        };
+        let result: Result<KrakenResult<AssetPairsResponse>> = self.client.query_public(
+            "AssetPairs",
+            AssetPairsRequest {
+                pair: pairs.join(","),
+            },
+        );
         result.and_then(unpack_kraken_result)
     }
     /// (Public) Get the ticker price for one or more asset pairs
@@ -108,6 +142,60 @@ impl KrakenAPI {
             "CancelAllOrdersAfter",
             CancelAllOrdersAfterRequest { timeout },
         );
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Place a market order
+    ///
+    /// Arguments:
+    /// * market_order: Market order object describing the parameters of the order
+    /// * user_ref_id: Optional user ref id to attach to the order
+    /// * validate: If true, the order is only validated and is not actually placed
+    pub fn add_market_order(
+        &mut self,
+        market_order: MarketOrder,
+        user_ref_id: Option<UserRefId>,
+        validate: bool,
+    ) -> Result<AddOrderResponse> {
+        let req = AddOrderRequest {
+            ordertype: OrderType::Market,
+            bs_type: market_order.bs_type,
+            volume: market_order.volume,
+            pair: market_order.pair,
+            price: Default::default(),
+            oflags: market_order.oflags,
+            userref: user_ref_id,
+            validate,
+        };
+        let result: Result<KrakenResult<AddOrderResponse>> =
+            self.client.query_private("AddOrder", req);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Place a limit order
+    ///
+    /// Arguments:
+    /// * limit_order: Limit order object describing the parameters of the order
+    /// * user_ref_id: Optional user ref id to attach to the order
+    /// * validate: If true, the order is only validated and is not actually placed
+    pub fn add_limit_order(
+        &mut self,
+        limit_order: LimitOrder,
+        user_ref_id: Option<UserRefId>,
+        validate: bool,
+    ) -> Result<AddOrderResponse> {
+        let req = AddOrderRequest {
+            ordertype: OrderType::Limit,
+            bs_type: limit_order.bs_type,
+            volume: limit_order.volume,
+            pair: limit_order.pair,
+            price: limit_order.price,
+            oflags: limit_order.oflags,
+            userref: user_ref_id,
+            validate,
+        };
+        let result: Result<KrakenResult<AddOrderResponse>> =
+            self.client.query_private("AddOrder", req);
         result.and_then(unpack_kraken_result)
     }
 }

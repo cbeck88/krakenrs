@@ -51,7 +51,7 @@ pub struct SystemStatusResponse {
 }
 
 /// A possible status of the kraken trading system
-#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Serialize, Deserialize, Ord, Clone, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SystemStatus {
     /// Online
@@ -86,6 +86,7 @@ pub type AssetsResponse = HashMap<String, AssetInfo>;
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct AssetPairsRequest {
     /// A comma-separated list of kraken asset pair strings
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub pair: String,
 }
 
@@ -127,7 +128,7 @@ pub struct TickerRequest {
 }
 
 /// (Substructure within) Result of kraken public "Ticker" API call
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AssetTickerInfo {
     /// Ask `[price, whole lot volume, lot volume]`
     pub a: Vec<String>,
@@ -151,9 +152,9 @@ pub type UserRefId = i32;
 
 /// Type (buy/sell)
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-pub enum Type {
+pub enum BsType {
     /// Buy
     Buy,
     /// Sell
@@ -162,7 +163,7 @@ pub enum Type {
 
 /// Possible order types in Kraken.
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum OrderType {
     /// Market
@@ -183,7 +184,7 @@ pub enum OrderType {
 
 /// Possible order statuses in Kraken.
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum OrderStatus {
     /// Pending
@@ -235,10 +236,15 @@ pub struct OrderInfo {
 
 /// Possible order flags in Kraken.
 /// These are options in a comma-separated list
-#[derive(Debug, Display, Ord, PartialOrd, Eq, PartialEq)]
+///
+/// * post: Post-only (only for limit orders. Prevents immediately matching as a market order)
+/// * fcib: Prefer fee in base currency. Default when selling.
+/// * fciq: Prefer fee in quote currency. Default when buying.
+/// * nompp: Disable market order protection.
+#[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum OrderFlag {
-    /// viqc
-    Viqc,
+    /// post
+    Post,
     /// fcib
     Fcib,
     /// fciq
@@ -251,7 +257,7 @@ impl FromStr for OrderFlag {
     type Err = &'static str;
     fn from_str(src: &str) -> core::result::Result<OrderFlag, Self::Err> {
         match src {
-            "viqc" => Ok(OrderFlag::Viqc),
+            "post" => Ok(OrderFlag::Post),
             "fcib" => Ok(OrderFlag::Fcib),
             "fciq" => Ok(OrderFlag::Fciq),
             "nompp" => Ok(OrderFlag::Nompp),
@@ -262,7 +268,7 @@ impl FromStr for OrderFlag {
 
 /// Possible miscellaneous info flags in Kraken.
 /// These are options in a comma-separated list
-#[derive(Debug, Display, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum MiscInfo {
     /// stopped
     Stopped,
@@ -287,14 +293,14 @@ impl FromStr for MiscInfo {
     }
 }
 
-/// Order-description-info used in Order APIs and AddStandardOrder API
+/// Order-description-info used in GetOpenOrders API
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OrderDescriptionInfo {
     /// asset pair
     pub pair: String,
     /// type of order (buy/sell)
     #[serde(rename = "type")]
-    pub bs_type: Type,
+    pub bs_type: BsType,
     /// order type
     pub ordertype: OrderType,
     /// primary price
@@ -311,6 +317,7 @@ pub struct OrderDescriptionInfo {
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct GetOpenOrdersRequest {
     /// restrict results to given user reference id (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub userref: Option<UserRefId>,
 }
 
@@ -361,4 +368,53 @@ pub struct CancelAllOrdersAfterResponse {
     /// The time when the trigger is set for (RFC 3339)
     #[serde(rename = "triggerTime")]
     pub trigger_time: String,
+}
+
+/// Add order request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddOrderRequest {
+    /// A user ref id for this order
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub userref: Option<UserRefId>,
+    /// order type
+    pub ordertype: OrderType,
+    /// type of order (buy/sell)
+    #[serde(rename = "type")]
+    pub bs_type: BsType,
+    /// volume (in lots)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub volume: String,
+    /// pair (AssetPair id or altname)
+    pub pair: String,
+    /// price
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub price: String,
+    /// order flags (comma separated list)
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub oflags: BTreeSet<OrderFlag>,
+    /// validate: If true, do not submit order
+    #[serde(skip_serializing_if = "core::ops::Not::not")]
+    pub validate: bool,
+}
+
+/// Add order response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddOrderResponse {
+    /// Description of resulting order
+    pub descr: OrderAdded,
+    /// Txids associated to order, if successful
+    #[serde(default)]
+    pub txid: Vec<String>,
+}
+
+/// Substructure within AddOrderResponse
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrderAdded {
+    /// Human-readable description of the order
+    #[serde(default)]
+    pub order: String,
+    /// Conditional close order description, if applicable
+    #[serde(default)]
+    pub close: String,
 }

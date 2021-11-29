@@ -11,7 +11,7 @@ use messages::{
     CancelOrderRequest, Empty, GetOpenOrdersRequest, KrakenResult, TickerRequest,
 };
 pub use messages::{
-    AddOrderResponse, AssetPairsResponse, AssetsResponse, BalanceResponse, BsType,
+    AddOrderResponse, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse, BsType,
     CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse,
     GetOpenOrdersResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType,
     SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,

@@ -100,7 +100,7 @@ fn main() {
         kc_config.creds = creds_data;
     }
 
-    let mut api = KrakenAPI::try_from(kc_config).expect("could not create kraken api");
+    let api = KrakenAPI::try_from(kc_config).expect("could not create kraken api");
 
     match config.command {
         Command::Time => {

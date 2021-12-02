@@ -90,7 +90,7 @@ impl KrakenClient {
 
     /// Execute a public API, given method, and object matching the expected schema, and returning expected schema or an error.
     pub fn query_public<D: Serialize, R: DeserializeOwned>(
-        &mut self,
+        &self,
         method: &str,
         query_data: D,
     ) -> Result<R> {
@@ -104,7 +104,7 @@ impl KrakenClient {
 
     /// Execute a private API, given method, and object matching the expected schema, and returning expected schema or an error.
     pub fn query_private<D: Serialize, R: DeserializeOwned>(
-        &mut self,
+        &self,
         method: &str,
         query_data: D,
     ) -> Result<R> {
@@ -126,7 +126,7 @@ impl KrakenClient {
 
     /// Send a query (public or private) to kraken API, and interpret response as JSON
     fn query<R: DeserializeOwned>(
-        &mut self,
+        &self,
         url_path: &str,
         headers: HeaderMap,
         post_data: String,

@@ -2,8 +2,8 @@
 
 #![deny(missing_docs)]
 
-mod kraken_client;
-pub use kraken_client::*;
+mod kraken_rest_client;
+pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
@@ -19,6 +19,12 @@ pub use messages::{
 
 use core::convert::TryFrom;
 use std::collections::BTreeSet;
+
+// Websockets API support
+#[cfg(feature = "ws")]
+mod ws;
+#[cfg(feature = "ws")]
+pub use ws::*;
 
 /// A description of a market order to place
 #[derive(Debug, Clone)]
@@ -48,13 +54,13 @@ pub struct LimitOrder {
     pub oflags: BTreeSet<OrderFlag>,
 }
 
-/// A connection to the Kraken API
+/// A connection to the Kraken REST API
 /// This only supports blocking http requests for now
-pub struct KrakenAPI {
-    client: KrakenClient,
+pub struct KrakenRestAPI {
+    client: KrakenRestClient,
 }
 
-impl KrakenAPI {
+impl KrakenRestAPI {
     /// (Public) Get the kraken system's time
     pub fn time(&self) -> Result<TimeResponse> {
         let result: Result<KrakenResult<TimeResponse>> = self.client.query_public("Time", Empty {});
@@ -197,11 +203,11 @@ impl KrakenAPI {
     }
 }
 
-impl TryFrom<KrakenClientConfig> for KrakenAPI {
+impl TryFrom<KrakenClientConfig> for KrakenRestAPI {
     type Error = Error;
     fn try_from(src: KrakenClientConfig) -> Result<Self> {
-        Ok(KrakenAPI {
-            client: KrakenClient::try_from(src)?,
+        Ok(KrakenRestAPI {
+            client: KrakenRestClient::try_from(src)?,
         })
     }
 }

@@ -2,7 +2,8 @@ use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
 use krakenrs::{
-    BsType, KrakenAPI, KrakenClientConfig, KrakenCredentials, LimitOrder, MarketOrder, OrderFlag,
+    BsType, KrakenClientConfig, KrakenCredentials, KrakenRestAPI, LimitOrder, MarketOrder,
+    OrderFlag,
 };
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -100,7 +101,7 @@ fn main() {
         kc_config.creds = creds_data;
     }
 
-    let api = KrakenAPI::try_from(kc_config).expect("could not create kraken api");
+    let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
 
     match config.command {
         Command::Time => {

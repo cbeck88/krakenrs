@@ -47,7 +47,7 @@ pub struct KrakenCredentials {
 }
 
 /// A low-level https connection to kraken that can execute public or private methods.
-pub struct KrakenClient {
+pub struct KrakenRestClient {
     /// Http client
     client: reqwest::blocking::Client,
     /// Our configuration
@@ -61,7 +61,7 @@ pub struct KrakenClient {
 // KrakenRS version
 const KRAKEN_RS_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
-impl TryFrom<KrakenClientConfig> for KrakenClient {
+impl TryFrom<KrakenClientConfig> for KrakenRestClient {
     type Error = Error;
     fn try_from(config: KrakenClientConfig) -> Result<Self> {
         let base_url = Url::from_str("https://api.kraken.com/")?;
@@ -82,7 +82,7 @@ impl TryFrom<KrakenClientConfig> for KrakenClient {
     }
 }
 
-impl KrakenClient {
+impl KrakenRestClient {
     /// Change the credentials used
     pub fn set_creds(&mut self, creds: KrakenCredentials) {
         self.config.creds = creds;

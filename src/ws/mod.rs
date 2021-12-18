@@ -7,11 +7,11 @@ use std::sync::{
 };
 use std::thread;
 
+mod types;
+pub use types::{BookData, BookEntry, SubscriptionStatus, SubscriptionType, SystemStatus};
+
 mod conn;
-pub use conn::{
-    BookData, BookEntry, Error as WsError, KrakenWsClient, KrakenWsConfig, SystemStatus,
-    WsAPIResults,
-};
+pub use conn::{Error as WsError, KrakenWsClient, KrakenWsConfig, WsAPIResults};
 
 /// A handle to Kraken websockets API feeds
 pub struct KrakenWsAPI {

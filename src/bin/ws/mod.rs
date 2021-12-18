@@ -39,7 +39,7 @@ pub fn main() {
         Command::Book { pairs } => {
             let ws_config = KrakenWsConfig {
                 subscribe_book: pairs.clone(),
-                book_depth: 10,
+                ..Default::default()
             };
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
@@ -56,12 +56,12 @@ pub fn main() {
 
                 if next != prev {
                     for (pair, book_data) in &next {
-                        println!("{} asks:", pair);
-                        for (price, entry) in book_data.ask.iter() {
+                        println!("{} bids:", pair);
+                        for (price, entry) in book_data.bid.iter() {
                             println!("{}\t\t{}", price, entry.volume);
                         }
-                        println!("{} bids:", pair);
-                        for (price, entry) in book_data.bid.iter().rev() {
+                        println!("{} asks:", pair);
+                        for (price, entry) in book_data.ask.iter() {
                             println!("{}\t\t{}", price, entry.volume);
                         }
                         println!("");

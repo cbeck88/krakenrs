@@ -1,15 +1,16 @@
 //! An interface for getting data from Kraken websockets API, while another thread manages
 //! the updates from the websockets connection.
 
-mod conn;
-use conn::{ApiResults, KrakenWsClient};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
 use std::thread;
 
-pub use conn::{BookData, Error as WsError, KrakenWsConfig, SystemStatus};
+mod conn;
+pub use conn::{
+    ApiResults, BookData, BookEntry, Error as WsError, KrakenWsClient, KrakenWsConfig, SystemStatus,
+};
 
 /// A handle to Kraken websockets API feeds
 pub struct KrakenWsApi {

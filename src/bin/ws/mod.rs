@@ -39,7 +39,7 @@ pub fn main() {
         Command::Book { pairs } => {
             let ws_config = KrakenWsConfig {
                 subscribe_book: pairs.clone(),
-                ..Default::default()
+                book_depth: 10,
             };
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 

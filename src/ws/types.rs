@@ -24,11 +24,11 @@ impl BookData {
     pub fn checksum(&self) -> u32 {
         let mut hasher = crc32fast::Hasher::new();
         // asks must be sorted low to high
-        for (_, ask) in self.ask.iter() {
+        for (_, ask) in self.ask.iter().take(10) {
             ask.crc32(&mut hasher);
         }
         // bids must be sorted high to low
-        for (_, bid) in self.bid.iter().rev() {
+        for (_, bid) in self.bid.iter().rev().take(10) {
             bid.crc32(&mut hasher);
         }
         hasher.finalize()

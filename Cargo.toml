@@ -6,7 +6,7 @@ edition = "2018"
 readme = "README.md"
 description = "Rust bindings to the Kraken REST API and websockets API for spot trading"
 license = "WTFPL"
-categories = ["kraken, web-programming::http-client, web-programming::websocket"]
+categories = ["kraken", "web-programming::http-client", "web-programming::websocket"]
 repository = "https://github.com/garbageslam/krakenrs"
 
 [lib]

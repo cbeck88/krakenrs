@@ -12,6 +12,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     convert::TryFrom,
+    io::{Error as IoError, ErrorKind},
+    path::Path,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -20,7 +22,7 @@ use url::{ParseError as UrlParseError, Url};
 /// Configuration needed to initialize a Kraken client.
 /// The credentials aren't needed if only public APIs are used
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct KrakenClientConfig {
+pub struct KrakenRestConfig {
     /// The timeout to use for http connections
     /// Recommended is to use 30s.
     pub timeout: Duration,
@@ -28,7 +30,7 @@ pub struct KrakenClientConfig {
     pub creds: KrakenCredentials,
 }
 
-impl Default for KrakenClientConfig {
+impl Default for KrakenRestConfig {
     fn default() -> Self {
         Self {
             timeout: Duration::new(30, 0),
@@ -46,12 +48,33 @@ pub struct KrakenCredentials {
     pub secret: String,
 }
 
+impl KrakenCredentials {
+    /// Load json-format kraken credentials file
+    pub fn load_json_file<P: AsRef<Path>>(path: P) -> core::result::Result<Self, IoError> {
+        let creds_file = std::fs::read_to_string(path)?;
+        let creds_data: KrakenCredentials = serde_json::from_str(&creds_file)?;
+        if creds_data.key.is_empty() {
+            return Err(IoError::new(
+                ErrorKind::Other,
+                "Missing credentials 'key' value",
+            ));
+        }
+        if creds_data.secret.is_empty() {
+            return Err(IoError::new(
+                ErrorKind::Other,
+                "Missing credentials 'secret' value",
+            ));
+        }
+        Ok(creds_data)
+    }
+}
+
 /// A low-level https connection to kraken that can execute public or private methods.
 pub struct KrakenRestClient {
     /// Http client
     client: reqwest::blocking::Client,
     /// Our configuration
-    config: KrakenClientConfig,
+    config: KrakenRestConfig,
     /// Base url to contact kraken at
     base_url: Url,
     /// Kraken Api version to connect to
@@ -61,9 +84,9 @@ pub struct KrakenRestClient {
 // KrakenRS version
 const KRAKEN_RS_VERSION: Option<&'static str> = option_env!("CARGO_PKG_VERSION");
 
-impl TryFrom<KrakenClientConfig> for KrakenRestClient {
+impl TryFrom<KrakenRestConfig> for KrakenRestClient {
     type Error = Error;
-    fn try_from(config: KrakenClientConfig) -> Result<Self> {
+    fn try_from(config: KrakenRestConfig) -> Result<Self> {
         let base_url = Url::from_str("https://api.kraken.com/")?;
         let version = 0;
         let client = reqwest::blocking::ClientBuilder::new()

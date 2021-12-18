@@ -1,4 +1,5 @@
-//! A rust crate for making requests to the Kraken API
+//! A rust crate for making requests to the Kraken Rest API and subscribing
+//! to Kraken websockets feeds
 
 #![deny(missing_docs)]
 
@@ -203,9 +204,9 @@ impl KrakenRestAPI {
     }
 }
 
-impl TryFrom<KrakenClientConfig> for KrakenRestAPI {
+impl TryFrom<KrakenRestConfig> for KrakenRestAPI {
     type Error = Error;
-    fn try_from(src: KrakenClientConfig) -> Result<Self> {
+    fn try_from(src: KrakenRestConfig) -> Result<Self> {
         Ok(KrakenRestAPI {
             client: KrakenRestClient::try_from(src)?,
         })

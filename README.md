@@ -33,11 +33,11 @@ Examples
 REST API:
 
 ```
-    use krakenrs::{KrakenClientConfig, KrakenRestAPI};
+    use krakenrs::{KrakenRestConfig, KrakenRestAPI};
     use serde_json::to_string_pretty;
 
     fn main() {
-        let kc_config = KrakenClientConfig::default();
+        let kc_config = KrakenRestConfig::default();
         let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
 
         println!(
@@ -57,7 +57,7 @@ REST API:
 Websockets API:
 
 ```
-    use krakenrs::{KrakenWsConfig, KrakenWsApi};
+    use krakenrs::{KrakenWsConfig, KrakenWsAPI};
     use std::{
         collections::BTreeMap,
         time::Duration,
@@ -71,7 +71,7 @@ Websockets API:
             subscribe_book: pairs.clone(),
             book_depth: 10,
         };
-        let api = KrakenWsApi::new(ws_config).expect("could not connect to websockets api");
+        let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
         loop {
             thread::sleep(Duration::from_millis(500));
@@ -89,7 +89,7 @@ Websockets API:
     }
 ```
 
-The `KrakenWsApi` object spawns a worker thread internally which drives the websockets connection.
+The `KrakenWsAPI` object spawns a worker thread internally which drives the websockets connection.
 If you don't want that you can import the `KrakenWsClient` object instead and arrange the worker
 thread as you like, while observing latest feed data in other threads using the handle to the `ApiResult` object.
 

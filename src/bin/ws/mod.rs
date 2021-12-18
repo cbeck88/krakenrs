@@ -1,6 +1,6 @@
 use ctrlc::set_handler;
 use displaydoc::Display;
-use krakenrs::{KrakenWsApi, KrakenWsConfig};
+use krakenrs::{KrakenWsAPI, KrakenWsConfig};
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -41,7 +41,7 @@ pub fn main() {
                 subscribe_book: pairs.clone(),
                 book_depth: 10,
             };
-            let api = KrakenWsApi::new(ws_config).expect("could not connect to websockets api");
+            let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
             let mut prev = pairs
                 .iter()

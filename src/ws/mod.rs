@@ -9,20 +9,21 @@ use std::thread;
 
 mod conn;
 pub use conn::{
-    ApiResults, BookData, BookEntry, Error as WsError, KrakenWsClient, KrakenWsConfig, SystemStatus,
+    BookData, BookEntry, Error as WsError, KrakenWsClient, KrakenWsConfig, SystemStatus,
+    WsAPIResults,
 };
 
 /// A handle to Kraken websockets API feeds
-pub struct KrakenWsApi {
+pub struct KrakenWsAPI {
     // The worker thread that is consuming kraken api messages
     worker_thread: Option<thread::JoinHandle<()>>,
     // Handle to ask the worker thread to stop
     stop_requested: Arc<AtomicBool>,
     // Handle to the output of the worker thread
-    output: Arc<ApiResults>,
+    output: Arc<WsAPIResults>,
 }
 
-impl KrakenWsApi {
+impl KrakenWsAPI {
     /// Create a new web sockets connection to Kraken and subscribe to
     /// specified channels
     pub fn new(src: KrakenWsConfig) -> Result<Self, WsError> {
@@ -76,7 +77,7 @@ impl KrakenWsApi {
     }
 }
 
-impl Drop for KrakenWsApi {
+impl Drop for KrakenWsAPI {
     fn drop(&mut self) {
         if let Some(worker_thread) = self.worker_thread.take() {
             self.stop_requested.store(true, Ordering::SeqCst);

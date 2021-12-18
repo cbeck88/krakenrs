@@ -28,7 +28,7 @@ pub struct KrakenWsConfig {
 
 /// A sink where the ws worker can put updates for subscribed data
 #[derive(Default)]
-pub struct ApiResults {
+pub struct WsAPIResults {
     /// Current system status
     pub system_status: Mutex<Option<SystemStatus>>,
     /// Map Asset Pair -> Book data
@@ -172,7 +172,7 @@ pub struct KrakenWsClient {
     // websocket
     socket: WsClient,
     // output
-    output: Arc<ApiResults>,
+    output: Arc<WsAPIResults>,
     // Channel-name -> AssetPair -> SubscriptionStatus
     book_subscriptions: HashMap<String, HashMap<String, SubscriptionStatus>>,
     // Last subscribe attempt
@@ -182,11 +182,11 @@ pub struct KrakenWsClient {
 impl KrakenWsClient {
     /// Create a new Kraken Websockets Client from config
     /// (Only public api at time of writing)
-    pub fn new(config: KrakenWsConfig) -> Result<(Self, Arc<ApiResults>), Error> {
+    pub fn new(config: KrakenWsConfig) -> Result<(Self, Arc<WsAPIResults>), Error> {
         let (socket, _http_response) = tungstenite::connect("wss://ws.kraken.com")?;
 
         // Pre-populate API Results with book data we plan to subscribe to
-        let mut api_results = ApiResults::default();
+        let mut api_results = WsAPIResults::default();
         for pair in config.subscribe_book.iter() {
             api_results
                 .book

@@ -418,3 +418,12 @@ pub struct OrderAdded {
     #[serde(default)]
     pub close: String,
 }
+
+/// WebSockets authenitcation token response, including token and expiry
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetWebSocketsTokenResponse {
+    /// Websockets authentication token
+    pub token: String,
+    /// Expiration time (in seconds)
+    pub expires: u64,
+}

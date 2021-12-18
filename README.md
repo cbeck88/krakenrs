@@ -136,7 +136,7 @@ Usage
 Other projects of interest
 --------------------------
 
-- [`theotow kraken rust client`](https://github.com/theotow/kraken-rust-api-client)
+- [`dovahcrow kraken rust client`](https://github.com/dovahcrow/kraken-rs)
 - [`async kraken ws`](https://crates.io/crates/async_kraken_ws)
 - [`coinnect`](https://github.com/hugues31/coinnect)
 - [`python3-krakenex`](https://github.com/veox/python3-krakenex)

@@ -14,8 +14,8 @@ use messages::{
 pub use messages::{
     AddOrderResponse, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse, BsType,
     CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse,
-    GetOpenOrdersResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType,
-    SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    GetOpenOrdersResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
+    OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -67,18 +67,21 @@ impl KrakenRestAPI {
         let result: Result<KrakenResult<TimeResponse>> = self.client.query_public("Time", Empty {});
         result.and_then(unpack_kraken_result)
     }
+
     /// (Public) Get the kraken system's status
     pub fn system_status(&self) -> Result<SystemStatusResponse> {
         let result: Result<KrakenResult<SystemStatusResponse>> =
             self.client.query_public("SystemStatus", Empty {});
         result.and_then(unpack_kraken_result)
     }
+
     /// (Public) Get the list of kraken's supported assets, and info
     pub fn assets(&self) -> Result<AssetsResponse> {
         let result: Result<KrakenResult<AssetsResponse>> =
             self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
+
     /// (Public) Get the list of kraken's asset pairs, and info
     ///
     /// Arguments:
@@ -92,6 +95,7 @@ impl KrakenRestAPI {
         );
         result.and_then(unpack_kraken_result)
     }
+
     /// (Public) Get the ticker price for one or more asset pairs
     ///
     /// Arguments:
@@ -105,12 +109,21 @@ impl KrakenRestAPI {
         );
         result.and_then(unpack_kraken_result)
     }
+
     /// (Private) Get the balance
     pub fn get_account_balance(&self) -> Result<BalanceResponse> {
         let result: Result<KrakenResult<BalanceResponse>> =
             self.client.query_private("Balance", Empty {});
         result.and_then(unpack_kraken_result)
     }
+
+    /// (Private) Get a websockets authentication token
+    pub fn get_websockets_token(&self) -> Result<GetWebSocketsTokenResponse> {
+        let result: Result<KrakenResult<GetWebSocketsTokenResponse>> =
+            self.client.query_private("GetWebSocketsToken", Empty {});
+        result.and_then(unpack_kraken_result)
+    }
+
     /// (Private) Get the list of open orders
     ///
     /// Arguments:
@@ -121,6 +134,7 @@ impl KrakenRestAPI {
             .query_private("OpenOrders", GetOpenOrdersRequest { userref });
         result.and_then(unpack_kraken_result)
     }
+
     /// (Private) Cancel order
     ///
     /// Arguments:
@@ -131,12 +145,14 @@ impl KrakenRestAPI {
             .query_private("CancelOrder", CancelOrderRequest { txid: id });
         result.and_then(unpack_kraken_result)
     }
+
     /// (Private) Cancel all orders (regardless of user ref or tx id)
     pub fn cancel_all_orders(&self) -> Result<CancelAllOrdersResponse> {
         let result: Result<KrakenResult<CancelAllOrdersResponse>> =
             self.client.query_private("CancelAll", Empty {});
         result.and_then(unpack_kraken_result)
     }
+
     /// (Private) Cancel all orders after
     ///
     /// Arguments:

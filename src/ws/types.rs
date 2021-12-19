@@ -137,6 +137,8 @@ impl BookEntry {
 pub enum SubscriptionType {
     /// book
     Book,
+    /// openOrders
+    OpenOrders,
 }
 
 impl FromStr for SubscriptionType {
@@ -144,65 +146,8 @@ impl FromStr for SubscriptionType {
     fn from_str(src: &str) -> core::result::Result<SubscriptionType, Self::Err> {
         match src {
             "book" => Ok(SubscriptionType::Book),
+            "openOrders" => Ok(SubscriptionType::OpenOrders),
             _ => Err("unknown subscription type"),
-        }
-    }
-}
-
-/// Possible subscription status types in Kraken WS api
-#[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SubscriptionStatus {
-    /// subscribed
-    Subscribed,
-    /// unsubscribed
-    Unsubscribed,
-    /// error
-    Error,
-}
-
-impl Default for SubscriptionStatus {
-    fn default() -> Self {
-        Self::Unsubscribed
-    }
-}
-
-impl FromStr for SubscriptionStatus {
-    type Err = &'static str;
-    fn from_str(src: &str) -> core::result::Result<Self, Self::Err> {
-        match src {
-            "subscribed" => Ok(Self::Subscribed),
-            "unsubscribed" => Ok(Self::Unsubscribed),
-            "error" => Ok(Self::Error),
-            _ => Err("unknown subscription status"),
-        }
-    }
-}
-
-/// Possible system status types in Kraken WS api
-#[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub enum SystemStatus {
-    /// online
-    Online,
-    /// maintenance
-    Maintenance,
-    /// cancel_only
-    CancelOnly,
-    /// limit_only
-    LimitOnly,
-    /// post_only
-    PostOnly,
-}
-
-impl FromStr for SystemStatus {
-    type Err = &'static str;
-    fn from_str(src: &str) -> core::result::Result<Self, Self::Err> {
-        match src {
-            "online" => Ok(Self::Online),
-            "maintenance" => Ok(Self::Maintenance),
-            "cancel_only" => Ok(Self::CancelOnly),
-            "limit_only" => Ok(Self::LimitOnly),
-            "post_only" => Ok(Self::PostOnly),
-            _ => Err("unknown system status"),
         }
     }
 }

@@ -1,7 +1,10 @@
-use super::{BookData, SubscriptionStatus, SubscriptionType, SystemStatus};
+use super::{
+    messages::{OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
+    types::{BookData, SubscriptionType},
+};
 use serde_json::{json, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     net::TcpStream,
     str::FromStr,
     sync::{
@@ -23,6 +26,8 @@ pub struct KrakenWsConfig {
     pub subscribe_book: Vec<String>,
     /// Depth of order book subscriptions (how many ask/bid entries)
     pub book_depth: usize,
+    /// Optional configuration for private feeds
+    pub private: Option<KrakenPrivateWsConfig>,
 }
 
 impl Default for KrakenWsConfig {
@@ -30,8 +35,18 @@ impl Default for KrakenWsConfig {
         Self {
             subscribe_book: Default::default(),
             book_depth: 10,
+            private: None,
         }
     }
+}
+
+/// Configuration for private websockets feeds
+#[derive(Clone, Debug)]
+pub struct KrakenPrivateWsConfig {
+    /// Authentication token (get from REST API)
+    pub token: String,
+    /// If true, subscribe to own orders feed for this account
+    pub subscribe_open_orders: bool,
 }
 
 /// A sink where the ws worker can put updates for subscribed data
@@ -41,6 +56,8 @@ pub struct WsAPIResults {
     pub system_status: Mutex<Option<SystemStatus>>,
     /// Map Asset Pair -> Book data
     pub book: HashMap<String, Mutex<BookData>>,
+    /// Map order id -> open orders
+    pub open_orders: Mutex<HashMap<String, OrderInfo>>,
     /// Indicates that the stream is closed permanently
     pub stream_closed: AtomicBool,
 }
@@ -53,8 +70,13 @@ pub struct KrakenWsClient {
     socket: WsClient,
     // output
     output: Arc<WsAPIResults>,
+    // Tracks subscription statuses of book subscriptions for multiple pairs
     // Channel-name -> AssetPair -> SubscriptionStatus
     book_subscriptions: HashMap<String, HashMap<String, SubscriptionStatus>>,
+    // Tracks subscription status of the openOrders subscription (and channel)
+    // This is Some if we are subscribed, and contains the current sequence number
+    // It is None if we are unsubscribed or there was an error
+    open_orders_subscription: Option<u64>,
     // Last subscribe attempt
     last_subscribe_attempt: Instant,
 }
@@ -63,7 +85,11 @@ impl KrakenWsClient {
     /// Create a new Kraken Websockets Client from config
     /// (Only public api at time of writing)
     pub fn new(config: KrakenWsConfig) -> Result<(Self, Arc<WsAPIResults>), Error> {
-        let (socket, _http_response) = tungstenite::connect("wss://ws.kraken.com")?;
+        let (socket, _http_response) = tungstenite::connect(if config.private.is_some() {
+            "wss://ws-auth.kraken.com"
+        } else {
+            "wss://ws.kraken.com"
+        })?;
 
         // Pre-populate API Results with book data we plan to subscribe to
         let mut api_results = WsAPIResults::default();
@@ -79,11 +105,16 @@ impl KrakenWsClient {
             socket,
             output: output.clone(),
             book_subscriptions: Default::default(),
+            open_orders_subscription: None,
             last_subscribe_attempt: Instant::now(),
         };
 
         for pair in config.subscribe_book.iter() {
             result.subscribe_book(pair.to_string())?;
+        }
+
+        if config.private.is_some() {
+            result.subscribe_open_orders()?;
         }
 
         Ok((result, output))
@@ -97,6 +128,24 @@ impl KrakenWsClient {
             "subscription": {
                 "name": "book",
                 "depth": self.config.book_depth,
+            },
+        });
+        self.socket
+            .write_message(Message::Text(payload.to_string()))
+    }
+
+    /// Subscribe to the openOrders strream
+    fn subscribe_open_orders(&mut self) -> Result<(), Error> {
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to open orders without a token, this is a logic error");
+        let payload = json!({
+            "event": "subscribe",
+            "subscription": {
+                "name": "openOrders",
+                "token": private_config.token.clone(),
             },
         });
         self.socket
@@ -161,6 +210,15 @@ impl KrakenWsClient {
                         "Error: Could not subscribe to book '{}': {}",
                         asset_pair, err
                     );
+                }
+            }
+        }
+
+        if let Some(private_config) = self.config.private.as_ref() {
+            if private_config.subscribe_open_orders && self.open_orders_subscription.is_none() {
+                eprintln!("Info: Resubscribing to openOrders");
+                if let Err(err) = self.subscribe_open_orders() {
+                    eprintln!("Error: Could not subscribe to openOrders: {}", err);
                 }
             }
         }
@@ -236,78 +294,84 @@ impl KrakenWsClient {
         &mut self,
         map: serde_json::Map<String, Value>,
     ) -> Result<(), &'static str> {
-        let channel_name = map
-            .get("channelName")
-            .ok_or("Missing channelName")?
-            .as_str()
-            .ok_or("channelName was not a string")?
-            .clone();
-        let pair = map
-            .get("pair")
-            .ok_or("Missing pair")?
-            .as_str()
-            .ok_or("pair was not a string")?
-            .clone();
-        if let Some(err) = map.get("errorMessage") {
-            if let Value::String(err_msg) = err {
-                eprintln!(
-                    "Subscription ({}, {}) error: {}",
-                    channel_name, pair, err_msg
-                );
-            } else {
-                return Err("errorMessage is not a string");
-            }
-            return Ok(());
-        }
         let status = SubscriptionStatus::from_str(
             map.get("status")
                 .ok_or("Missing status")?
                 .as_str()
                 .ok_or("status is not a string")?,
         )?;
-        let subscription = SubscriptionType::from_str(
-            map.get("subscription")
-                .ok_or("Missing subscription")?
-                .as_object()
-                .ok_or("subscription is not an object")?
-                .get("name")
-                .ok_or("Missing subscription.name")?
-                .as_str()
-                .ok_or("subscription.name is not a string")?,
-        )?;
+        match status {
+            SubscriptionStatus::Error => {
+                let err_msg = map
+                    .get("errorMessage")
+                    .ok_or("missing errorMessage")?
+                    .as_str()
+                    .ok_or("errorMessage is not a string")?;
+                eprintln!("subscription error: {}", err_msg);
+                return Err("subscription error");
+            }
+            SubscriptionStatus::Subscribed | SubscriptionStatus::Unsubscribed => {
+                let subscription = SubscriptionType::from_str(
+                    map.get("subscription")
+                        .ok_or("Missing subscription")?
+                        .as_object()
+                        .ok_or("subscription is not an object")?
+                        .get("name")
+                        .ok_or("Missing subscription.name")?
+                        .as_str()
+                        .ok_or("subscription.name is not a string")?,
+                )?;
 
-        match subscription {
-            SubscriptionType::Book => match status {
-                SubscriptionStatus::Subscribed => {
-                    let stat = self
-                        .book_subscriptions
-                        .entry(channel_name.to_string())
-                        .or_default()
-                        .entry(pair.to_string())
-                        .or_default();
-                    if *stat != status {
-                        eprintln!("Subscribed to {} {}", channel_name, pair);
-                        *stat = status;
-                    } else {
-                        eprintln!("Unexpected repeated subscription message: {:?}", map);
+                let channel_name = map
+                    .get("channelName")
+                    .ok_or("Missing channelName")?
+                    .as_str()
+                    .ok_or("channelName was not a string")?
+                    .clone();
+
+                match subscription {
+                    SubscriptionType::Book => {
+                        // Book subscriptions refer to a pair
+                        let pair = map
+                            .get("pair")
+                            .ok_or("Missing pair")?
+                            .as_str()
+                            .ok_or("pair was not a string")?
+                            .clone();
+
+                        let stat = self
+                            .book_subscriptions
+                            .entry(channel_name.to_string())
+                            .or_default()
+                            .entry(pair.to_string())
+                            .or_default();
+                        if *stat != status {
+                            eprintln!("{} @ {} book: {}", status, pair, channel_name);
+                            *stat = status;
+                        } else {
+                            eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                        }
+                    }
+                    SubscriptionType::OpenOrders => {
+                        if status.is_subscribed() {
+                            if self.open_orders_subscription.is_none() {
+                                eprintln!("Subscribed to {}", channel_name);
+                                // Initialize to zero so that first sequence number will be one larger
+                                self.open_orders_subscription = Some(0);
+                            } else {
+                                eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                            }
+                        } else {
+                            if self.open_orders_subscription.is_some() {
+                                eprintln!("Unsubscribed from {}", channel_name);
+                                self.open_orders_subscription = None;
+                            } else {
+                                eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                            }
+                        }
                     }
                 }
-                SubscriptionStatus::Unsubscribed => {
-                    let stat = self
-                        .book_subscriptions
-                        .entry(channel_name.to_string())
-                        .or_default()
-                        .entry(pair.to_string())
-                        .or_default();
-                    if *stat != status {
-                        eprintln!("Unsubscribed from {} {}", channel_name, pair);
-                        *stat = status;
-                    } else {
-                        eprintln!("Unexpected repeated unsubscription message: {:?}", map);
-                    }
-                }
-                SubscriptionStatus::Error => {}
-            },
+            }
         }
         Ok(())
     }
@@ -322,7 +386,77 @@ impl KrakenWsClient {
             .as_str()
             .ok_or("channel name was not a string")?;
 
-        if let Some(book_channel) = self.book_subscriptions.get(channel_name) {
+        if channel_name == "openOrders" {
+            // This is an openOrders message. Check the sequence number
+            {
+                let sequence_number = array
+                    .get(array.len() - 1)
+                    .ok_or("index invalid")?
+                    .as_object()
+                    .ok_or("expected an object for sequence number")?
+                    .get("sequence")
+                    .ok_or("missing sequence number")?
+                    .as_u64()
+                    .ok_or("sequence number was not an integer")?;
+                let our_seq_number = self
+                    .open_orders_subscription
+                    .as_mut()
+                    .ok_or("unexpected openOrders message")?;
+                if *our_seq_number + 1 != sequence_number {
+                    // TODO: Unsubscribe from openOrders and resubscribe later?
+                    return Err("openOrders sequence number mismatch");
+                }
+                *our_seq_number += 1;
+            }
+            // Apply the updates
+            let mut open_orders = self.output.open_orders.lock().expect("mutex poisoned");
+            let updates = array
+                .get(0)
+                .ok_or("index invalid")?
+                .as_array()
+                .ok_or("updates were not an array")?;
+            for update in updates {
+                for (order_id, val) in update
+                    .as_object()
+                    .ok_or("expected update to be an object")?
+                {
+                    match open_orders.entry(order_id.to_string()) {
+                        Entry::Occupied(mut entry) => {
+                            // This is likely a status update, lets see what to do
+                            let status = val
+                                .as_object()
+                                .ok_or("order update was not an object")?
+                                .get("status")
+                                .ok_or("order update missing status")?;
+                            let status: OrderStatus = serde_json::from_value(status.clone())
+                                .map_err(|err| {
+                                    eprintln!("Could not parse order status: {}", err);
+                                    "OrderStatus deserialization error"
+                                })?;
+                            match status {
+                                OrderStatus::Pending | OrderStatus::Open => {
+                                    entry.get_mut().status = status;
+                                }
+                                OrderStatus::Closed
+                                | OrderStatus::Expired
+                                | OrderStatus::Canceled => {
+                                    entry.remove();
+                                }
+                            }
+                        }
+                        Entry::Vacant(entry) => {
+                            // Parse the data as an OrderInfo object and add the new order id
+                            let order_info : OrderInfo = serde_json::from_value(val.clone()).map_err(|err| {
+                                eprintln!("Could not parse open order data as an OrderInfo object: {}", err);
+                                "OrderInfo deserialization error"
+                            })?;
+                            entry.insert(order_info);
+                        }
+                    }
+                }
+            }
+            return Ok(());
+        } else if let Some(book_channel) = self.book_subscriptions.get(channel_name) {
             // This looks like a book message. The last item should be the asset pair
             let pair = array
                 .get(array.len() - 1)
@@ -390,6 +524,7 @@ impl KrakenWsClient {
                         if checksum != expected_checksum {
                             eprintln!("Error: checksum mismatch, book is out of sync.");
                             book.checksum_failed = true;
+                            // TODO: Unsubscribe from this book? maybe_resubscribe will happen later
                             return Err("checksum mismatch");
                         }
                     }

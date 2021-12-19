@@ -24,8 +24,21 @@ Otherwise you only get the REST API, which can do all the same things (and more)
 Threading
 ---------
 
-Unlike some other bindings, these are not async APIs. We have chosen to create blocking APIs
-instead for simplicity and ease of debugging.
+Unlike some other bindings, these are not async APIs (although the websockets feeds are implicitly asynchronous, they just don't use the keyword).
+
+We have chosen to create blocking APIs for the Kraken REST API version for a few reasons:
+* simplicity
+* ease of debugging
+* when trying to make multiple private REST API calls in parallel, we often see invalid nonce errors
+  this is because the nonces are based on timestamps, but when multiple requests are created and sent
+  in parallel, this is inherently racy and sometimes the request with the higher nonce will be processed
+  by kraken first, invalidating the others.
+
+Additionally, the REST API has quite strict rate limits so making large numbers of requests
+in parallel isn't really possible.
+
+Instead, it seems better to lean on the Websockets API, which is easy to use whether you want to use
+an async runtime or not, and not make lots of calls to the REST API.
 
 Examples
 --------

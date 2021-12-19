@@ -5,13 +5,19 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use std::thread;
-
-mod types;
-pub use types::{BookData, BookEntry, SubscriptionStatus, SubscriptionType, SystemStatus};
+use std::{
+    collections::{BTreeMap, HashMap},
+    thread,
+};
 
 mod conn;
-pub use conn::{Error as WsError, KrakenWsClient, KrakenWsConfig, WsAPIResults};
+pub use conn::{Error, KrakenPrivateWsConfig, KrakenWsClient, KrakenWsConfig, WsAPIResults};
+
+mod types;
+pub use types::{BookData, BookEntry};
+
+mod messages;
+pub use messages::*;
 
 /// A handle to Kraken websockets API feeds
 pub struct KrakenWsAPI {
@@ -26,7 +32,7 @@ pub struct KrakenWsAPI {
 impl KrakenWsAPI {
     /// Create a new web sockets connection to Kraken and subscribe to
     /// specified channels
-    pub fn new(src: KrakenWsConfig) -> Result<Self, WsError> {
+    pub fn new(src: KrakenWsConfig) -> Result<Self, Error> {
         let stop_requested = Arc::new(AtomicBool::default());
         let thread_stop_requested = stop_requested.clone();
         let (mut client, output) = KrakenWsClient::new(src)?;
@@ -66,6 +72,29 @@ impl KrakenWsAPI {
             .book
             .get(pair)
             .expect("unknown asset pair")
+            .lock()
+            .expect("mutex poisoned")
+            .clone()
+    }
+
+    /// Get all latest book data that we have subscribed to
+    pub fn get_all_books(&self) -> BTreeMap<String, BookData> {
+        self.output
+            .book
+            .iter()
+            .map(|(asset_pair, lock)| {
+                (
+                    asset_pair.clone(),
+                    lock.lock().expect("mutex poisoned").clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Get latest openOrder data
+    pub fn get_open_orders(&self) -> HashMap<String, OrderInfo> {
+        self.output
+            .open_orders
             .lock()
             .expect("mutex poisoned")
             .clone()

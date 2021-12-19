@@ -1,7 +1,9 @@
-//! Structures representing json schema sent to and from Kraken
+//! Structures representing json schema sent to and from Kraken REST API
+//! https://docs.kraken.com/rest/
 
 use crate::{Error, Result};
 use displaydoc::Display;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_with::CommaSeparator;
 use std::collections::{BTreeSet, HashMap};
@@ -112,7 +114,7 @@ pub struct AssetPair {
     /// Amount to multiply lot volume by to get currency volume
     pub lot_multiplier: u64,
     /// Fee schedule array in [volume, percent] tuples
-    pub fees: Vec<Vec<f64>>,
+    pub fees: Vec<Vec<Decimal>>,
     /// Minimum order size (in terms of base currency)
     pub ordermin: Option<String>,
 }
@@ -200,20 +202,18 @@ pub enum OrderStatus {
 }
 
 /// Order-info used in OpenOrders and QueryOrders APIs
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrderInfo {
     /// User reference id for the order
     pub userref: UserRefId,
     /// Status of the order
     pub status: OrderStatus,
     /// unix timestamp of when the order was placed
-    pub opentm: f64,
-    /// unix timestamp of order start time (or 0 if not set)
-    #[serde(default)]
-    pub starttm: f64,
-    /// unix timestamp of order end time (or 0 if not set)
-    #[serde(default)]
-    pub expiretm: f64,
+    pub opentm: Decimal,
+    /// unix timestamp of order start time
+    pub starttm: Option<Decimal>,
+    /// unix timestamp of order end time
+    pub expiretm: Option<Decimal>,
     /// order description info
     pub descr: OrderDescriptionInfo,
     /// volume of order (base currency unless viqc set in oflags)
@@ -294,7 +294,7 @@ impl FromStr for MiscInfo {
 }
 
 /// Order-description-info used in GetOpenOrders API
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrderDescriptionInfo {
     /// asset pair
     pub pair: String,
@@ -304,11 +304,11 @@ pub struct OrderDescriptionInfo {
     /// order type
     pub ordertype: OrderType,
     /// primary price
-    pub price: String,
+    pub price: Decimal,
     /// secondary price
-    pub price2: String,
+    pub price2: Decimal,
     /// leverage
-    pub leverage: String,
+    pub leverage: Option<Decimal>,
     /// human-readable description
     pub order: String,
 }

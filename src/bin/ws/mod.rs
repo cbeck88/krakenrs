@@ -1,8 +1,11 @@
 use ctrlc::set_handler;
 use displaydoc::Display;
-use krakenrs::{KrakenWsAPI, KrakenWsConfig};
+use krakenrs::{
+    ws::{KrakenPrivateWsConfig, KrakenWsAPI, KrakenWsConfig},
+    KrakenCredentials, KrakenRestAPI, KrakenRestConfig,
+};
 use std::{
-    collections::BTreeMap,
+    convert::TryFrom,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -15,7 +18,6 @@ struct KrakFeedConfig {
     command: Command,
 
     /// Credentials file, formatted in json. Required only for private APIs
-    #[allow(unused)]
     #[structopt(parse(from_os_str))]
     creds: Option<PathBuf>,
 }
@@ -25,6 +27,9 @@ struct KrakFeedConfig {
 enum Command {
     /// Get websockets feed for one or more asset-pair books
     Book { pairs: Vec<String> },
+
+    /// Get websockets feed for own orders
+    OwnOrders {},
 }
 
 static PROCESS_TERMINATING: AtomicBool = AtomicBool::new(false);
@@ -40,19 +45,14 @@ pub fn main() {
             let ws_config = KrakenWsConfig {
                 subscribe_book: pairs.clone(),
                 book_depth: 10,
+                private: None,
             };
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
-            let mut prev = pairs
-                .iter()
-                .map(|pair| (pair.clone(), api.get_book(pair)))
-                .collect::<BTreeMap<_, _>>();
+            let mut prev = api.get_all_books();
 
             loop {
-                let next = pairs
-                    .iter()
-                    .map(|pair| (pair.clone(), api.get_book(pair)))
-                    .collect::<BTreeMap<_, _>>();
+                let next = api.get_all_books();
 
                 if next != prev {
                     for (pair, book_data) in &next {
@@ -70,6 +70,55 @@ pub fn main() {
                             return;
                         }
                     }
+                    prev = next;
+                }
+
+                if api.stream_closed() {
+                    println!("Stream closed");
+                    return;
+                }
+
+                if PROCESS_TERMINATING.load(Ordering::SeqCst) {
+                    eprintln!("Process terminating");
+                    return;
+                }
+            }
+        }
+        Command::OwnOrders {} => {
+            // First get a websockets token
+            let mut kc_config = KrakenRestConfig::default();
+
+            // Load credentials from disk if specified
+            if let Some(creds) = config.creds {
+                eprintln!("Credentials path: {:?}", creds);
+                kc_config.creds =
+                    KrakenCredentials::load_json_file(creds).expect("credential file error");
+            }
+
+            let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
+            let token = api
+                .get_websockets_token()
+                .expect("could not get websockets token")
+                .token;
+
+            let ws_config = KrakenWsConfig {
+                private: Some(KrakenPrivateWsConfig {
+                    token,
+                    subscribe_open_orders: true,
+                }),
+                ..Default::default()
+            };
+            let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
+
+            let mut prev = api.get_open_orders();
+
+            loop {
+                let next = api.get_open_orders();
+
+                if next != prev {
+                    println!("Orders:");
+                    println!("{}", serde_json::to_string_pretty(&next).unwrap());
+                    println!("");
                     prev = next;
                 }
 

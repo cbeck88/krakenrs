@@ -23,9 +23,7 @@ use std::collections::BTreeSet;
 
 // Websockets API support
 #[cfg(feature = "ws")]
-mod ws;
-#[cfg(feature = "ws")]
-pub use ws::*;
+pub mod ws;
 
 /// A description of a market order to place
 #[derive(Debug, Clone)]

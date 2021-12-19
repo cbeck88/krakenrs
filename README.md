@@ -25,7 +25,7 @@ Otherwise you only get the REST API, which can do all the same things (and more)
 Threading
 ---------
 
-Unlike some other bindings, these are not async APIs (although the websockets feeds are implicitly asynchronous, they just don't use the keyword).
+Unlike some other bindings, these are not async APIs (although the websockets feeds are implicitly asynchronous).
 
 We have chosen to create blocking APIs for the Kraken REST API version for a few reasons:
 * simplicity

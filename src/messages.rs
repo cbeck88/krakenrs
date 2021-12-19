@@ -98,7 +98,7 @@ pub struct AssetPair {
     /// Alternate pair name
     pub alt_name: Option<String>,
     /// Web-sockets pair name (if available)
-    pub ws_name: Option<String>,
+    pub wsname: Option<String>,
     /// Asset class of base component
     pub aclass_base: String,
     /// Asset id of base component

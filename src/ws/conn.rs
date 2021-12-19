@@ -134,6 +134,22 @@ impl KrakenWsClient {
             .write_message(Message::Text(payload.to_string()))
     }
 
+    /// Unsubscribe from a book stream
+    fn unsubscribe_book(&mut self, pair: String) -> Result<(), Error> {
+        // Give it some time before we attempt to resubscribe
+        self.last_subscribe_attempt = Instant::now();
+        let payload = json!({
+            "event": "unsubscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "book",
+                "depth": self.config.book_depth,
+            },
+        });
+        self.socket
+            .write_message(Message::Text(payload.to_string()))
+    }
+
     /// Subscribe to the openOrders strream
     fn subscribe_open_orders(&mut self) -> Result<(), Error> {
         let private_config = self
@@ -143,6 +159,26 @@ impl KrakenWsClient {
             .expect("Can't subscribe to open orders without a token, this is a logic error");
         let payload = json!({
             "event": "subscribe",
+            "subscription": {
+                "name": "openOrders",
+                "token": private_config.token.clone(),
+            },
+        });
+        self.socket
+            .write_message(Message::Text(payload.to_string()))
+    }
+
+    /// Unsubscribe from the openOrders strream
+    fn unsubscribe_open_orders(&mut self) -> Result<(), Error> {
+        // Give it some time before we attempt to resubscribe
+        self.last_subscribe_attempt = Instant::now();
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to open orders without a token, this is a logic error");
+        let payload = json!({
+            "event": "unsubscribe",
             "subscription": {
                 "name": "openOrders",
                 "token": private_config.token.clone(),
@@ -403,7 +439,9 @@ impl KrakenWsClient {
                     .as_mut()
                     .ok_or("unexpected openOrders message")?;
                 if *our_seq_number + 1 != sequence_number {
-                    // TODO: Unsubscribe from openOrders and resubscribe later?
+                    if let Err(err) = self.unsubscribe_open_orders() {
+                        eprintln!("Error: When unsubscribing from open orders: {}", err);
+                    }
                     return Err("openOrders sequence number mismatch");
                 }
                 *our_seq_number += 1;
@@ -524,7 +562,10 @@ impl KrakenWsClient {
                         if checksum != expected_checksum {
                             eprintln!("Error: checksum mismatch, book is out of sync.");
                             book.checksum_failed = true;
-                            // TODO: Unsubscribe from this book? maybe_resubscribe will happen later
+                            drop(book);
+                            if let Err(err) = self.unsubscribe_book(pair.to_string()) {
+                                eprintln!("Error: When unsubscribing from book {}: {}", pair, err);
+                            }
                             return Err("checksum mismatch");
                         }
                     }

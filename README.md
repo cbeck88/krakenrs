@@ -10,6 +10,7 @@ with an idiomatic Rust interface, including getting ticker info and making marke
 - [`reqwest`](https://docs.rs/reqwest/0.11.0/reqwest/) is used for https
 - [`tungstenite`](https://docs.rs/reqwest/0.16.0/tungstenite/) is used for websockets
 - [`RustCrypto`](https://docs.rs/hmac/0.10.1/hmac/) crates used for the Kraken authentication scheme
+- [`rust_decimal`](https://docs.rs/rust_decimal/latest/rust_decimal/) used to represent Decimal values from kraken
 - Robust error handling
 
 Both public and private APIs are supported, but not all the calls and options are exposed, only the ones that were needed.

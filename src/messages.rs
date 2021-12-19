@@ -116,7 +116,7 @@ pub struct AssetPair {
     /// Fee schedule array in [volume, percent] tuples
     pub fees: Vec<Vec<Decimal>>,
     /// Minimum order size (in terms of base currency)
-    pub ordermin: Option<String>,
+    pub ordermin: Option<Decimal>,
 }
 
 /// Type alias for response of AssetPairs API call
@@ -217,15 +217,15 @@ pub struct OrderInfo {
     /// order description info
     pub descr: OrderDescriptionInfo,
     /// volume of order (base currency unless viqc set in oflags)
-    pub vol: String,
+    pub vol: Decimal,
     /// volume executed (base currency unless viqc set in oflags)
-    pub vol_exec: String,
+    pub vol_exec: Decimal,
     /// total cost (quote currency unless unless viqc set in oflags)
-    pub cost: String,
+    pub cost: Decimal,
     /// total fee (quote currency)
-    pub fee: String,
+    pub fee: Decimal,
     /// average price (quote currency unless viqc set in oflags)
-    pub price: String,
+    pub price: Decimal,
     /// order flags (comma separated list)
     #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
     pub oflags: BTreeSet<OrderFlag>,

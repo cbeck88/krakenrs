@@ -2,10 +2,13 @@ use super::{
     messages::{OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
     types::{BookData, SubscriptionType},
 };
+use futures::{
+    stream::{SplitSink, SplitStream},
+    SinkExt, StreamExt,
+};
 use serde_json::{json, Value};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
-    net::TcpStream,
     str::FromStr,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -13,11 +16,18 @@ use std::{
     },
     time::{Duration, Instant},
 };
-use tungstenite::{stream::MaybeTlsStream, Message, WebSocket};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use url::Url;
 
-type WsClient = WebSocket<MaybeTlsStream<TcpStream>>;
+type WsClient = WebSocketStream<MaybeTlsStream<TcpStream>>;
+type SinkType = SplitSink<WsClient, Message>;
 
-pub use tungstenite::Error;
+pub use tokio_tungstenite::tungstenite::Error;
+
+/// When we want to change whether or not we are subscribed to a feed, we wait
+/// this long before we reissue the subscribe / unsubscribe request
+const SUBSCRIPTION_CHANGE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Configuration for the websocket connection and feeds to subscribe to
 #[derive(Clone, Debug)]
@@ -58,7 +68,7 @@ pub struct WsAPIResults {
     pub book: HashMap<String, Mutex<BookData>>,
     /// Map order id -> open orders
     pub open_orders: Mutex<HashMap<String, OrderInfo>>,
-    /// Indicates that the stream is closed permanently
+    /// Indicates that the stream is closed right now, and data may be stale.
     pub stream_closed: AtomicBool,
 }
 
@@ -66,30 +76,43 @@ pub struct WsAPIResults {
 pub struct KrakenWsClient {
     // config we were created with
     config: KrakenWsConfig,
-    // websocket
-    socket: WsClient,
+    // websocket sink
+    sink: SinkType,
     // output
     output: Arc<WsAPIResults>,
-    // Tracks subscription statuses of book subscriptions for multiple pairs
-    // Channel-name -> AssetPair -> SubscriptionStatus
-    book_subscriptions: HashMap<String, HashMap<String, SubscriptionStatus>>,
-    // Tracks subscription status of the openOrders subscription (and channel)
+    // Track subscription statuses of different channels
+    subscription_tracker: SubscriptionTracker,
+    // Tracks sequence number of the openOrders subscription
     // This is Some if we are subscribed, and contains the current sequence number
     // It is None if we are unsubscribed or there was an error
-    open_orders_subscription: Option<u64>,
-    // Last subscribe attempt
-    last_subscribe_attempt: Instant,
+    open_orders_sequence_number: Option<u64>,
 }
 
 impl KrakenWsClient {
-    /// Create a new Kraken Websockets Client from config
-    /// (Only public api at time of writing)
-    pub fn new(config: KrakenWsConfig) -> Result<(Self, Arc<WsAPIResults>), Error> {
-        let (socket, _http_response) = tungstenite::connect(if config.private.is_some() {
-            "wss://ws-auth.kraken.com"
+    /// Create a new Kraken Websockets Client
+    ///
+    /// Returns:
+    /// * The websockets client object, which contains all websockets and Kraken protocol context
+    /// * The stream portion of the websockets connection. This should be polled by
+    ///   the caller and the result passed to "update". The client and stream should be
+    ///   dropped if update yields an error.
+    ///
+    ///   Note: Use KrakenWsAPI if you want a batteries included version of this.
+    ///   If you want control over exactly how that
+    ///   polling is working then you should call KrakenWsClient::new and wire it
+    ///   up as you like.
+    /// * Arc<WsApiResults>. This may be shared with synchronous code and polled for updates.
+    ///   Note: KrakenWsAPI also conceals this detail.
+    pub async fn new(
+        config: KrakenWsConfig,
+    ) -> Result<(Self, SplitStream<WsClient>, Arc<WsAPIResults>), Error> {
+        let url = if config.private.is_some() {
+            Url::parse("wss://ws-auth.kraken.com").unwrap()
         } else {
-            "wss://ws.kraken.com"
-        })?;
+            Url::parse("wss://ws.kraken.com").unwrap()
+        };
+        let (socket, _request) = tokio_tungstenite::connect_async(url).await?;
+        let (sink, stream) = socket.split();
 
         // Pre-populate API Results with book data we plan to subscribe to
         let mut api_results = WsAPIResults::default();
@@ -102,146 +125,110 @@ impl KrakenWsClient {
         let output = Arc::new(api_results);
         let mut result = Self {
             config: config.clone(),
-            socket,
+            sink,
             output: output.clone(),
-            book_subscriptions: Default::default(),
-            open_orders_subscription: None,
-            last_subscribe_attempt: Instant::now(),
+            subscription_tracker: Default::default(),
+            open_orders_sequence_number: None,
         };
 
         for pair in config.subscribe_book.iter() {
-            result.subscribe_book(pair.to_string())?;
+            result
+                .subscription_tracker
+                .get_book(pair.to_string())
+                .last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+            result.subscribe_book(pair.to_string()).await?;
         }
 
         if config.private.is_some() {
-            result.subscribe_open_orders()?;
+            // TODO: In the future, check config.subscribe_open_orders, and only
+            // subscribe to open_orders if desired by the user.
+            //
+            // However, right now this is the only thing you can subscribe to,
+            // and kraken says they will close the private connection if you don't
+            // subscribe to any private feed.
+            result.subscription_tracker.get_open_orders().last_request =
+                Some((SubscriptionStatus::Subscribed, Instant::now()));
+            result.subscribe_open_orders().await?;
         }
 
-        Ok((result, output))
+        Ok((result, stream, output))
     }
 
-    /// Subscribe to a book stream
-    fn subscribe_book(&mut self, pair: String) -> Result<(), Error> {
-        let payload = json!({
-            "event": "subscribe",
-            "pair": [pair],
-            "subscription": {
-                "name": "book",
-                "depth": self.config.book_depth,
-            },
-        });
-        self.socket
-            .write_message(Message::Text(payload.to_string()))
-    }
-
-    /// Unsubscribe from a book stream
-    fn unsubscribe_book(&mut self, pair: String) -> Result<(), Error> {
-        // Give it some time before we attempt to resubscribe
-        self.last_subscribe_attempt = Instant::now();
-        let payload = json!({
-            "event": "unsubscribe",
-            "pair": [pair],
-            "subscription": {
-                "name": "book",
-                "depth": self.config.book_depth,
-            },
-        });
-        self.socket
-            .write_message(Message::Text(payload.to_string()))
-    }
-
-    /// Subscribe to the openOrders strream
-    fn subscribe_open_orders(&mut self) -> Result<(), Error> {
-        let private_config = self
-            .config
-            .private
-            .as_ref()
-            .expect("Can't subscribe to open orders without a token, this is a logic error");
-        let payload = json!({
-            "event": "subscribe",
-            "subscription": {
-                "name": "openOrders",
-                "token": private_config.token.clone(),
-            },
-        });
-        self.socket
-            .write_message(Message::Text(payload.to_string()))
-    }
-
-    /// Unsubscribe from the openOrders strream
-    fn unsubscribe_open_orders(&mut self) -> Result<(), Error> {
-        // Give it some time before we attempt to resubscribe
-        self.last_subscribe_attempt = Instant::now();
-        let private_config = self
-            .config
-            .private
-            .as_ref()
-            .expect("Can't subscribe to open orders without a token, this is a logic error");
-        let payload = json!({
-            "event": "unsubscribe",
-            "subscription": {
-                "name": "openOrders",
-                "token": private_config.token.clone(),
-            },
-        });
-        self.socket
-            .write_message(Message::Text(payload.to_string()))
-    }
-
-    /// Poll websocket for updates and apply them
-    /// Blocks until at least one update occurs
+    /// Apply a result (or error) from the websocket stream to the kraken protocol context.
     ///
-    /// Returns Error::ConnectionClosed if the stream has been closed
-    pub fn update(&mut self) -> Result<(), Error> {
-        match self.socket.read_message() {
+    /// Returns Ok when the message was handled successfully
+    /// Errors should be considered fatal, and will result in stream_closed being set
+    /// for the consumer.
+    pub fn update(&mut self, stream_result: Result<Message, Error>) -> Result<(), Error> {
+        match stream_result {
             Ok(Message::Text(text)) => {
                 self.handle_kraken_text(text);
-                Ok(())
             }
             Ok(Message::Binary(_)) => {
                 eprintln!("Warn: Unexpected binary message from Kraken");
-                Ok(())
             }
-            Ok(Message::Ping(_)) => Ok(()),
-            Ok(Message::Pong(_)) => Ok(()),
-            Ok(Message::Close(_)) => {
-                // Per documentation: https://github.com/snapview/tungstenite-rs/blob/68541e409543f5bff9d2d4913b7521c58ae00c04/src/protocol/mod.rs#L154
-                // Keep trying to write pending until ConnectionClosed is returned
-                self.finish_close();
-                return Err(Error::ConnectionClosed);
-            }
-            Err(Error::ConnectionClosed) => {
+            Ok(Message::Ping(_)) => {}
+            Ok(Message::Pong(_)) => {}
+            Ok(Message::Close(_)) => return Err(Error::ConnectionClosed),
+            Err(err) => {
                 self.output.stream_closed.store(true, Ordering::SeqCst);
-                Err(Error::ConnectionClosed)
+                return Err(err);
             }
-            Err(err) => Err(err),
         }
+        Ok(())
     }
 
     /// Resubscribe to any subscription that kraken unsubscribed us from (due to system outage)
-    pub fn maybe_resubscribe(&mut self) -> Result<(), &'static str> {
-        // Don't do this more than once every 10 seconds
-        let now = Instant::now();
-        if self.last_subscribe_attempt + Duration::from_secs(10) > now {
-            return Ok(());
-        }
-        self.last_subscribe_attempt = now;
-
-        let mut active_book_subscriptions = HashSet::<String>::default();
-        for (channel_name, data) in &self.book_subscriptions {
-            if channel_name.contains("book") {
-                for (pair, status) in data {
-                    if *status == SubscriptionStatus::Subscribed {
-                        active_book_subscriptions.insert(pair.to_string());
-                    }
+    ///
+    /// Any errors are logged
+    pub async fn check_subscriptions(&mut self) {
+        // First look for active subscriptions with errors and try to unsubscribe
+        for (asset_pair, sub) in self.subscription_tracker.book_subscriptions.iter_mut() {
+            if sub.status.is_subscribed()
+                && sub.needs_unsubscribe
+                && !sub.tried_to_change_recently()
+            {
+                sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
+                drop(sub);
+                if let Err(err) = Self::unsubscribe_book(
+                    &mut self.sink,
+                    self.config.book_depth,
+                    asset_pair.clone(),
+                )
+                .await
+                {
+                    eprintln!(
+                        "Error: Could not unsubscribe from book {}: {}",
+                        asset_pair.clone(),
+                        err
+                    );
                 }
             }
         }
 
+        {
+            let mut sub = self.subscription_tracker.get_open_orders();
+            if sub.status.is_subscribed()
+                && sub.needs_unsubscribe
+                && !sub.tried_to_change_recently()
+            {
+                sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
+                drop(sub);
+                if let Err(err) = self.unsubscribe_open_orders().await {
+                    eprintln!("Error: Could not unsubscribe from open orders: {}", err);
+                }
+            }
+        }
+
+        // Now look for things we are not subscribed to that we should be.
+        // Check all the requested subscriptions
         for asset_pair in self.config.subscribe_book.clone() {
-            if !active_book_subscriptions.contains(&asset_pair) {
+            let mut sub = self.subscription_tracker.get_book(asset_pair.to_string());
+            if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
                 eprintln!("Info: Resubscribing to book '{}'", asset_pair);
-                if let Err(err) = self.subscribe_book(asset_pair.to_string()) {
+                sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                drop(sub);
+                if let Err(err) = self.subscribe_book(asset_pair.to_string()).await {
                     eprintln!(
                         "Error: Could not subscribe to book '{}': {}",
                         asset_pair, err
@@ -251,38 +238,90 @@ impl KrakenWsClient {
         }
 
         if let Some(private_config) = self.config.private.as_ref() {
-            if private_config.subscribe_open_orders && self.open_orders_subscription.is_none() {
-                eprintln!("Info: Resubscribing to openOrders");
-                if let Err(err) = self.subscribe_open_orders() {
-                    eprintln!("Error: Could not subscribe to openOrders: {}", err);
+            if private_config.subscribe_open_orders {
+                let mut sub = self.subscription_tracker.get_open_orders();
+                if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                    eprintln!("Info: Resubscribing to openOrders");
+                    sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                    drop(sub);
+                    if let Err(err) = self.subscribe_open_orders().await {
+                        eprintln!("Error: Could not subscribe to openOrders: {}", err);
+                    }
                 }
             }
         }
-        Ok(())
     }
 
     /// Close the socket gracefully
-    pub fn close(&mut self) -> Result<(), Error> {
-        self.socket.close(None)?;
-        // Note: We don't finish_close here because Kraken servers don't seem to send ConnectionClosed back
-        Ok(())
+    pub async fn close(&mut self) -> Result<(), Error> {
+        self.output.stream_closed.store(true, Ordering::SeqCst);
+        self.sink.close().await
     }
 
-    fn finish_close(&mut self) {
-        // Per documentation: https://github.com/snapview/tungstenite-rs/blob/68541e409543f5bff9d2d4913b7521c58ae00c04/src/protocol/mod.rs#L154
-        // Keep trying to write pending until ConnectionClosed is returned
-        loop {
-            match self.socket.write_pending() {
-                Err(Error::ConnectionClosed) => {
-                    self.output.stream_closed.store(true, Ordering::SeqCst);
-                    return;
-                }
-                Err(err) => {
-                    eprintln!("When closing socket: {}", err);
-                }
-                Ok(_) => {}
-            }
-        }
+    /// Subscribe to a book stream
+    async fn subscribe_book(&mut self, pair: String) -> Result<(), Error> {
+        let payload = json!({
+            "event": "subscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "book",
+                "depth": self.config.book_depth,
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string())).await
+    }
+
+    /// Unsubscribe from a book stream
+    ///
+    /// Note: We made this not take self, to resolve a borrow checker issue
+    async fn unsubscribe_book(
+        sink: &mut SinkType,
+        book_depth: usize,
+        pair: String,
+    ) -> Result<(), Error> {
+        let payload = json!({
+            "event": "unsubscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "book",
+                "depth": book_depth,
+            },
+        });
+        sink.send(Message::Text(payload.to_string())).await
+    }
+
+    /// Subscribe to the openOrders strream
+    async fn subscribe_open_orders(&mut self) -> Result<(), Error> {
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to open orders without a token, this is a logic error");
+        let payload = json!({
+            "event": "subscribe",
+            "subscription": {
+                "name": "openOrders",
+                "token": private_config.token.clone(),
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string())).await
+    }
+
+    /// Unsubscribe from the openOrders strream
+    async fn unsubscribe_open_orders(&mut self) -> Result<(), Error> {
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to open orders without a token, this is a logic error");
+        let payload = json!({
+            "event": "unsubscribe",
+            "subscription": {
+                "name": "openOrders",
+                "token": private_config.token.clone(),
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string())).await
     }
 
     fn handle_kraken_text(&mut self, text: String) {
@@ -375,35 +414,29 @@ impl KrakenWsClient {
                             .ok_or("pair was not a string")?
                             .clone();
 
-                        let stat = self
-                            .book_subscriptions
-                            .entry(channel_name.to_string())
-                            .or_default()
-                            .entry(pair.to_string())
-                            .or_default();
-                        if *stat != status {
+                        self.subscription_tracker
+                            .add_book_channel(channel_name.to_string());
+                        let sub = self.subscription_tracker.get_book(pair.to_string());
+                        if sub.status != status {
                             eprintln!("{} @ {} book: {}", status, pair, channel_name);
-                            *stat = status;
+                            *sub = SubscriptionState::new(status);
                         } else {
                             eprintln!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
                     SubscriptionType::OpenOrders => {
-                        if status.is_subscribed() {
-                            if self.open_orders_subscription.is_none() {
+                        let sub = self.subscription_tracker.get_open_orders();
+                        if sub.status != status {
+                            *sub = SubscriptionState::new(status);
+                            if status.is_subscribed() {
                                 eprintln!("Subscribed to {}", channel_name);
-                                // Initialize to zero so that first sequence number will be one larger
-                                self.open_orders_subscription = Some(0);
+                                self.open_orders_sequence_number = Some(0);
                             } else {
-                                eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                                eprintln!("Unsubscribed from {}", channel_name);
+                                self.open_orders_sequence_number = None;
                             }
                         } else {
-                            if self.open_orders_subscription.is_some() {
-                                eprintln!("Unsubscribed from {}", channel_name);
-                                self.open_orders_subscription = None;
-                            } else {
-                                eprintln!("Unexpected repeated {} message: {:?}", status, map);
-                            }
+                            eprintln!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
                 }
@@ -435,13 +468,14 @@ impl KrakenWsClient {
                     .as_u64()
                     .ok_or("sequence number was not an integer")?;
                 let our_seq_number = self
-                    .open_orders_subscription
+                    .open_orders_sequence_number
                     .as_mut()
                     .ok_or("unexpected openOrders message")?;
                 if *our_seq_number + 1 != sequence_number {
-                    if let Err(err) = self.unsubscribe_open_orders() {
-                        eprintln!("Error: When unsubscribing from open orders: {}", err);
-                    }
+                    // We need to try to resubscribe to open orders now
+                    self.subscription_tracker
+                        .get_open_orders()
+                        .needs_unsubscribe = true;
                     return Err("openOrders sequence number mismatch");
                 }
                 *our_seq_number += 1;
@@ -494,7 +528,7 @@ impl KrakenWsClient {
                 }
             }
             return Ok(());
-        } else if let Some(book_channel) = self.book_subscriptions.get(channel_name) {
+        } else if self.subscription_tracker.is_book_channel(channel_name) {
             // This looks like a book message. The last item should be the asset pair
             let pair = array
                 .get(array.len() - 1)
@@ -503,10 +537,8 @@ impl KrakenWsClient {
                 .ok_or("book message did not have asset pair string as last item")?;
 
             // Check if this matches a book subscription
-            let stat = book_channel
-                .get(pair)
-                .ok_or("unexpected book message, never subscribed to asset pair")?;
-            if *stat != SubscriptionStatus::Subscribed {
+            let sub = self.subscription_tracker.get_book(pair.to_string());
+            if !sub.status.is_subscribed() {
                 return Err("unexpected book message, not subscribed");
             }
 
@@ -563,9 +595,9 @@ impl KrakenWsClient {
                             eprintln!("Error: checksum mismatch, book is out of sync.");
                             book.checksum_failed = true;
                             drop(book);
-                            if let Err(err) = self.unsubscribe_book(pair.to_string()) {
-                                eprintln!("Error: When unsubscribing from book {}: {}", pair, err);
-                            }
+                            self.subscription_tracker
+                                .get_book(pair.to_string())
+                                .needs_unsubscribe = true;
                             return Err("checksum mismatch");
                         }
                     }
@@ -597,5 +629,67 @@ impl KrakenWsClient {
 impl Drop for KrakenWsClient {
     fn drop(&mut self) {
         self.output.stream_closed.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Object which tracks the status of our various subscriptions to Kraken,
+/// including both, what Kraken said the current status is, and, when we last tried to
+/// change it.
+#[derive(Default, Clone, Debug)]
+struct SubscriptionTracker {
+    /// A map from asset-pairs to subscription states
+    book_subscriptions: HashMap<String, SubscriptionState>,
+    /// Known book channel names
+    book_channels: HashSet<String>,
+    /// Subscription state of the openOrders channel
+    open_orders: SubscriptionState,
+}
+
+impl SubscriptionTracker {
+    pub fn is_book_channel(&self, book_channel: &str) -> bool {
+        self.book_channels.contains(book_channel)
+    }
+
+    pub fn add_book_channel(&mut self, book_channel: String) {
+        self.book_channels.insert(book_channel);
+    }
+
+    pub fn get_book(&mut self, asset_pair: String) -> &mut SubscriptionState {
+        self.book_subscriptions.entry(asset_pair).or_default()
+    }
+
+    pub fn get_open_orders(&mut self) -> &mut SubscriptionState {
+        &mut self.open_orders
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+struct SubscriptionState {
+    /// The last status that Kraken reported for this subscription
+    status: SubscriptionStatus,
+    /// The last request that we made to Kraken, and when
+    last_request: Option<(SubscriptionStatus, Instant)>,
+    /// A note to ourselves that we intend to unsubscribe and resubscribe due
+    /// to an error that we detected
+    needs_unsubscribe: bool,
+}
+
+impl SubscriptionState {
+    pub fn new(status: SubscriptionStatus) -> Self {
+        Self {
+            status,
+            ..Default::default()
+        }
+    }
+
+    /// Check if we tried to change the status "recently" meaning within
+    /// a certain number of seconds. If so then we should back off and wait
+    /// rather than try to change it again.
+    pub fn tried_to_change_recently(&self) -> bool {
+        self.last_request
+            .map(|(stat, time)| {
+                stat != self.status && time + SUBSCRIPTION_CHANGE_BACKOFF > Instant::now()
+            })
+            .unwrap_or(false)
     }
 }

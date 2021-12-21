@@ -12,7 +12,7 @@ use serde_with::CommaSeparator;
 use std::{collections::BTreeSet, str::FromStr};
 
 /// Possible subscription status types in Kraken WS api
-#[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Display, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SubscriptionStatus {
     /// subscribed
     Subscribed,

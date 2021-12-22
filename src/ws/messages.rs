@@ -7,7 +7,7 @@
 
 use displaydoc::Display;
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_with::CommaSeparator;
 use std::{collections::BTreeSet, str::FromStr};
 
@@ -283,8 +283,7 @@ pub struct AddOrderRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reqid: Option<u64>,
     /// A user ref id for this order
-    #[serde(with = "serde_with::rust::display_fromstr")]
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "user_ref_ser")]
     pub userref: Option<UserRefId>,
     /// order type
     pub ordertype: OrderType,
@@ -304,7 +303,18 @@ pub struct AddOrderRequest {
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub oflags: BTreeSet<OrderFlag>,
     /// validate: If true, do not submit order
-    #[serde(with = "serde_with::rust::display_fromstr")]
     #[serde(skip_serializing_if = "core::ops::Not::not")]
     pub validate: bool,
+}
+
+fn user_ref_ser<S>(src: &Option<UserRefId>, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let text = if let Some(src) = src {
+        src.to_string()
+    } else {
+        Default::default()
+    };
+    text.serialize(ser)
 }

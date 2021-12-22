@@ -283,6 +283,7 @@ pub struct AddOrderRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reqid: Option<u64>,
     /// A user ref id for this order
+    #[serde(with = "serde_with::rust::display_fromstr")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub userref: Option<UserRefId>,
     /// order type

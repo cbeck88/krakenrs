@@ -1,5 +1,5 @@
 use super::{
-    messages::{OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
+    messages::{AddOrderRequest, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
     types::{BookData, SubscriptionType},
 };
 use futures::{
@@ -11,12 +11,12 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
     time::{Duration, Instant},
 };
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::oneshot};
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
@@ -86,6 +86,14 @@ pub struct KrakenWsClient {
     // This is Some if we are subscribed, and contains the current sequence number
     // It is None if we are unsubscribed or there was an error
     open_orders_sequence_number: Option<u64>,
+    // Result senders for add_order calls
+    add_order_result_senders: HashMap<u64, oneshot::Sender<Result<String, String>>>,
+    // Result senders for cancel_order calls
+    cancel_order_result_senders: HashMap<u64, oneshot::Sender<Result<(), String>>>,
+    // Result senders for cancel_all_orders calls
+    cancel_all_orders_result_senders: HashMap<u64, oneshot::Sender<Result<u64, String>>>,
+    // Client req id ensures unique ids for different requests we make to kraken
+    client_req_id: AtomicU64,
 }
 
 impl KrakenWsClient {
@@ -127,6 +135,10 @@ impl KrakenWsClient {
             output: output.clone(),
             subscription_tracker: Default::default(),
             open_orders_sequence_number: None,
+            add_order_result_senders: Default::default(),
+            cancel_order_result_senders: Default::default(),
+            cancel_all_orders_result_senders: Default::default(),
+            client_req_id: Default::default(),
         };
 
         for pair in config.subscribe_book.iter() {
@@ -231,6 +243,134 @@ impl KrakenWsClient {
         }
     }
 
+    /// Submit an order over the websocket
+    ///
+    /// The oneshot::Sender is sent Ok if the order is confirmed from Kraken,
+    /// and the TxID of the order is returned. The error message from kraken is
+    /// returned otherwise. The sender gets nothing if we fail to submit the order
+    /// at all.
+    pub async fn add_order(
+        &mut self,
+        mut order: AddOrderRequest,
+        result_sender: oneshot::Sender<Result<String, String>>,
+    ) -> Result<(), Error> {
+        let token = if let Some(private_config) = self.config.private.as_ref() {
+            private_config.token.clone()
+        } else {
+            log::error!("Tried to submit an order, but this is not an authenticated channel");
+            // Drop the result_sender and do not signal an error to the websocket
+            return Ok(());
+        };
+
+        let client_req_id = self.client_req_id.fetch_add(1, Ordering::SeqCst);
+        order.event = "addOrder".into();
+        order.reqid = Some(client_req_id);
+        order.token = token;
+
+        // This drops the result_sender if serialization or sending fails
+        match serde_json::to_string(&order) {
+            Err(err) => {
+                log::error!("Could not serialize order: {}", err);
+                return Ok(());
+            }
+            Ok(text) => {
+                // We have to store the result_sender before awaiting
+                self.add_order_result_senders.insert(client_req_id, result_sender);
+                self.sink.send(Message::Text(text)).await.map_err(|err| {
+                    self.add_order_result_senders.remove(&client_req_id);
+                    err
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Submit a request to cancel an order over the websocket
+    ///
+    /// TxID may be a string used to identify an order, or a user-ref-id
+    ///
+    /// The oneshot::Sender is sent Ok if the cancel order is successful,
+    /// and the error message from kraken otherwise. The sender gets nothing
+    /// if we fail to submit the request at all.
+    pub async fn cancel_order(
+        &mut self,
+        txid: String,
+        result_sender: oneshot::Sender<Result<(), String>>,
+    ) -> Result<(), Error> {
+        let token = if let Some(private_config) = self.config.private.as_ref() {
+            private_config.token.clone()
+        } else {
+            log::error!("Tried to submit an order, but this is not an authenticated channel");
+            // Drop the result_sender and do not signal an error to the websocket
+            return Ok(());
+        };
+
+        let client_req_id = self.client_req_id.fetch_add(1, Ordering::SeqCst);
+
+        let payload = json! ({
+            "event": "cancelOrder",
+            "token": token,
+            "txid": [txid],
+            "reqid": client_req_id,
+        });
+
+        // We have to store the result_sender before awaiting
+        self.cancel_order_result_senders.insert(client_req_id, result_sender);
+
+        // This drops the result_sender if sending fails
+        self.sink
+            .send(Message::Text(payload.to_string()))
+            .await
+            .map_err(|err| {
+                self.cancel_order_result_senders.remove(&client_req_id);
+                err
+            })?;
+
+        Ok(())
+    }
+
+    /// Submit a request to cancel all orders over the websocket
+    ///
+    /// The oneshot::Sender is sent Ok if the cancel order is successful, with
+    /// the number of orders canceled. The sender gets the error message from
+    /// kraken otherwise. The sender gets nothing
+    /// if we fail to submit the request at all.
+    pub async fn cancel_all_orders(
+        &mut self,
+        result_sender: oneshot::Sender<Result<u64, String>>,
+    ) -> Result<(), Error> {
+        let token = if let Some(private_config) = self.config.private.as_ref() {
+            private_config.token.clone()
+        } else {
+            log::error!("Tried to submit an order, but this is not an authenticated channel");
+            // Drop the result_sender and do not signal an error to the websocket
+            return Ok(());
+        };
+
+        let client_req_id = self.client_req_id.fetch_add(1, Ordering::SeqCst);
+
+        let payload = json! ({
+            "event": "cancelAll",
+            "token": token,
+            "reqid": client_req_id,
+        });
+
+        // We have to store the result_sender before awaiting
+        self.cancel_all_orders_result_senders
+            .insert(client_req_id, result_sender);
+
+        // This drops the result_sender if sending fails
+        self.sink
+            .send(Message::Text(payload.to_string()))
+            .await
+            .map_err(|err| {
+                self.cancel_all_orders_result_senders.remove(&client_req_id);
+                err
+            })?;
+
+        Ok(())
+    }
+
     /// Close the socket gracefully
     pub async fn close(&mut self) -> Result<(), Error> {
         self.output.stream_closed.store(true, Ordering::SeqCst);
@@ -310,6 +450,18 @@ impl KrakenWsClient {
                     } else if event == "systemStatus" {
                         if let Err(err) = self.handle_system_status(map) {
                             log::error!("handling system status: {}\n{}", err, text)
+                        }
+                    } else if event == "addOrderStatus" {
+                        if let Err(err) = self.handle_add_order_status(map) {
+                            log::error!("handling add order status: {}\n{}", err, text)
+                        }
+                    } else if event == "cancelOrderStatus" {
+                        if let Err(err) = self.handle_cancel_order_status(map) {
+                            log::error!("handling cancel order status: {}\n{}", err, text)
+                        }
+                    } else if event == "cancelAllStatus" {
+                        if let Err(err) = self.handle_cancel_all_orders_status(map) {
+                            log::error!("handling cancel all order status: {}\n{}", err, text)
                         }
                     } else if event == "pong" || event == "heartbeat" {
                         // nothing to do
@@ -572,6 +724,119 @@ impl KrakenWsClient {
         )?;
         *self.output.system_status.lock().expect("mutex poisoned") = Some(status);
         Ok(())
+    }
+
+    fn handle_add_order_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
+        let req_id = map
+            .get("reqid")
+            .ok_or("missing req_id field")?
+            .as_u64()
+            .ok_or("reqid wasnt an integer")?;
+        let sender = self
+            .add_order_result_senders
+            .remove(&req_id)
+            .ok_or("unknown add_order reqid")?;
+        let status = map
+            .get("status")
+            .ok_or("missing status field")?
+            .as_str()
+            .ok_or("status wasnt a string")?;
+        if status == "ok" {
+            // tx_id is omitted when validate=true
+            let tx_id = map
+                .get("txid")
+                .map(|val| val.as_str().ok_or("txid wasnt a string"))
+                .transpose()?
+                .unwrap_or_default();
+            drop(sender.send(Ok(tx_id.to_string())));
+            Ok(())
+        } else if status == "error" {
+            let err_msg = map
+                .get("errorMessage")
+                .ok_or("missing errorMessage field")?
+                .as_str()
+                .ok_or("errorMessage wasnt a string")?;
+            log::error!("add_order: {}", err_msg);
+            drop(sender.send(Err(err_msg.to_string())));
+            Ok(())
+        } else {
+            log::error!("unexpected status: {}", status);
+            drop(sender.send(Err(format!("unexpected status: {}", status))));
+            Err("unexpected status")
+        }
+    }
+
+    fn handle_cancel_order_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
+        let req_id = map
+            .get("reqid")
+            .ok_or("missing req_id field")?
+            .as_u64()
+            .ok_or("reqid wasnt an integer")?;
+        let sender = self
+            .cancel_order_result_senders
+            .remove(&req_id)
+            .ok_or("unknown cancel_order reqid")?;
+        let status = map
+            .get("status")
+            .ok_or("missing status field")?
+            .as_str()
+            .ok_or("status wasnt a string")?;
+        if status == "ok" {
+            drop(sender.send(Ok(())));
+            Ok(())
+        } else if status == "error" {
+            let err_msg = map
+                .get("errorMessage")
+                .ok_or("missing errorMessage field")?
+                .as_str()
+                .ok_or("errorMessage wasnt a string")?;
+            log::error!("cancel_order: {}", err_msg);
+            drop(sender.send(Err(err_msg.to_string())));
+            Ok(())
+        } else {
+            log::error!("unexpected status: {}", status);
+            drop(sender.send(Err(format!("unexpected status: {}", status))));
+            Err("unexpected status")
+        }
+    }
+
+    fn handle_cancel_all_orders_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
+        let req_id = map
+            .get("reqid")
+            .ok_or("missing req_id field")?
+            .as_u64()
+            .ok_or("reqid wasnt an integer")?;
+        let sender = self
+            .cancel_all_orders_result_senders
+            .remove(&req_id)
+            .ok_or("unknown cancel_all_orders reqid")?;
+        let status = map
+            .get("status")
+            .ok_or("missing status field")?
+            .as_str()
+            .ok_or("status wasnt a string")?;
+        if status == "ok" {
+            let count = map
+                .get("count")
+                .ok_or("missing count field")?
+                .as_u64()
+                .ok_or("count wasnt an integer")?;
+            drop(sender.send(Ok(count)));
+            Ok(())
+        } else if status == "error" {
+            let err_msg = map
+                .get("errorMessage")
+                .ok_or("missing errorMessage field")?
+                .as_str()
+                .ok_or("errorMessage wasnt a string")?;
+            log::error!("cancel_all_orders: {}", err_msg);
+            drop(sender.send(Err(err_msg.to_string())));
+            Ok(())
+        } else {
+            log::error!("unexpected status: {}", status);
+            drop(sender.send(Err(format!("unexpected status: {}", status))));
+            Err("unexpected status")
+        }
     }
 }
 

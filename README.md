@@ -1,16 +1,18 @@
 krakenrs
 ========
 
-A Kraken API client in Rust.
+Unofficial bindings to Kraken spot trading API in Rust.
 
 This library provides a Rust client object implementing many of the calls from the [Kraken REST API](https://docs.kraken.com/rest/)
-with an idiomatic Rust interface, including getting ticker info and making market and limit orders.
+with an idiomatic Rust interface, including getting ticker info and making market and limit orders. Additionally it provides access
+to the [Kraken WS API](https://docs.kraken.com/ws/), both subscribing to feeds and submitting orders.
 
 - Requests and responses are strongly-typed, conversion done using [`serde_json`](https://docs.serde.rs/serde_json/)
 - [`reqwest`](https://docs.rs/reqwest/0.11.0/reqwest/) is used for https
-- [`tungstenite`](https://docs.rs/reqwest/0.16.0/tungstenite/) is used for websockets
+- [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite/latest/tokio_tungstenite/) is used for websockets
 - [`RustCrypto`](https://docs.rs/hmac/0.10.1/hmac/) crates used for the Kraken authentication scheme
 - [`rust_decimal`](https://docs.rs/rust_decimal/latest/rust_decimal/) used to represent Decimal values from kraken
+- [`log`](https://docs.rs/log/latest/log/) is used for logging
 - Robust error handling
 
 Both public and private APIs are supported, but not all the calls and options are exposed, only the ones that were needed.

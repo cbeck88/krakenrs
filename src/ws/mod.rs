@@ -5,13 +5,17 @@
 //! See also: https://tokio.rs/tokio/topics/bridging
 //! and the reqwest::blocking module
 
+use crate::{LimitOrder, MarketOrder};
 use futures::stream::StreamExt;
 use std::sync::{atomic::Ordering, Arc};
 use std::{
     collections::{BTreeMap, HashMap},
     thread,
 };
-use tokio::{runtime, sync::mpsc};
+use tokio::{
+    runtime,
+    sync::{mpsc, oneshot},
+};
 
 mod conn;
 pub use conn::{Error, KrakenPrivateWsConfig, KrakenWsClient, KrakenWsConfig, WsAPIResults};
@@ -65,15 +69,15 @@ impl KrakenWsAPI {
                                                 client.check_subscriptions().await;
                                             }
                                             Err(err) => {
-                                                log::error!("KrakenWsClient: error, closing stream: {}", err);
-                                                drop(client.close());
+                                                log::error!("error, closing stream: {}", err);
+                                                drop(client.close().await);
                                                 return;
                                             }
                                         }
                                     }
                                     None => {
-                                        log::warn!("KrakenWsClient: stream closed by kraken");
-                                        drop(client.close());
+                                        log::warn!("stream closed by kraken");
+                                        drop(client.close().await);
                                         return;
                                     }
                                 }
@@ -81,8 +85,29 @@ impl KrakenWsAPI {
                             msg = receiver.recv() => {
                                 match msg {
                                     None | Some(LocalRequest::Stop) => {
-                                        drop(client.close());
+                                        drop(client.close().await);
                                         return;
+                                    }
+                                    Some(LocalRequest::AddOrder{request, result_sender}) => {
+                                        if let Err(err) = client.add_order(request, result_sender).await {
+                                            log::error!("error submitting an order, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
+                                    }
+                                    Some(LocalRequest::CancelOrder{tx_id, result_sender}) => {
+                                        if let Err(err) = client.cancel_order(tx_id, result_sender).await {
+                                            log::error!("error canceling an order, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
+                                    }
+                                    Some(LocalRequest::CancelAllOrders{result_sender}) => {
+                                        if let Err(err) = client.cancel_all_orders(result_sender).await {
+                                            log::error!("error canceling all orders, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
                                     }
                                 }
                             }
@@ -126,6 +151,135 @@ impl KrakenWsAPI {
     pub fn stream_closed(&self) -> bool {
         self.output.stream_closed.load(Ordering::SeqCst)
     }
+
+    /// Submit a market order over the websockets connection.
+    /// This must be a private connection configured with the auth token.
+    ///
+    /// Arguments:
+    /// market_order: The market order to place
+    /// user_ref_id: The user-ref-id to associate to this order. Orders may be filtered or canceled by user-ref-id.
+    /// validate: If true, we just validate that the order was well formed and the order doesn't actually hit the books.
+    ///
+    /// Returns:
+    /// A oneshot::Reciever which yields either the TxID for the placed order, or an error message from kraken.
+    /// The Receiver produces no value if the order could not be successfully placed, and this will be logged.
+    /// The Receiver may be dropped if you don't care about the errors -- these error messages will be logged regardless.
+    /// The return value will be None if the stream is already closed.
+    pub fn add_market_order(
+        &self,
+        market_order: MarketOrder,
+        user_ref_id: Option<i32>,
+        validate: bool,
+    ) -> Option<oneshot::Receiver<Result<String, String>>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        let request = AddOrderRequest {
+            ordertype: OrderType::Market,
+            bs_type: market_order.bs_type.into(),
+            volume: market_order.volume,
+            pair: market_order.pair,
+            price: Default::default(),
+            oflags: market_order.oflags.into_iter().map(OrderFlag::from).collect(),
+            userref: user_ref_id,
+            validate,
+            ..Default::default()
+        };
+        if self
+            .sender
+            .send(LocalRequest::AddOrder { request, result_sender })
+            .is_ok()
+        {
+            Some(result_receiver)
+        } else {
+            None
+        }
+    }
+
+    /// Submit a limit order over the websockets connection.
+    /// This must be a private connection configured with the auth token.
+    ///
+    /// Arguments:
+    /// limit_order: The order order to place
+    /// user_ref_id: The user-ref-id to associate to this order. Orders may be filtered or canceled by user-ref-id.
+    /// validate: If true, we just validate that the order was well formed and the order doesn't actually hit the books.
+    ///
+    /// Returns:
+    /// A oneshot::Reciever which yields either the TxID for the placed order, or an error message from kraken.
+    /// The Receiver produces no value if the order could not be successfully placed, and this will be logged.
+    /// The Receiver may be dropped if you don't care about the errors -- these error messages will be logged regardless.
+    /// The return value will be None if the stream is already closed.
+    pub fn add_limit_order(
+        &self,
+        limit_order: LimitOrder,
+        user_ref_id: Option<i32>,
+        validate: bool,
+    ) -> Option<oneshot::Receiver<Result<String, String>>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        let request = AddOrderRequest {
+            ordertype: OrderType::Limit,
+            bs_type: limit_order.bs_type.into(),
+            volume: limit_order.volume,
+            pair: limit_order.pair,
+            price: limit_order.price,
+            oflags: limit_order.oflags.into_iter().map(OrderFlag::from).collect(),
+            userref: user_ref_id,
+            validate,
+            ..Default::default()
+        };
+        if self
+            .sender
+            .send(LocalRequest::AddOrder { request, result_sender })
+            .is_ok()
+        {
+            Some(result_receiver)
+        } else {
+            None
+        }
+    }
+
+    /// Submit a request to cancel an order over the websockets connection.
+    /// This must be a private connection configured with the auth token.
+    ///
+    /// Arguments:
+    /// tx_id: The TxId associated to an order, or, a user-ref-id
+    ///
+    /// Returns:
+    /// A oneshot::Reciever which yields either Ok on success canceling, or an error message from kraken.
+    /// The Receiver produces no value if the request could not be successfully placed, and this will be logged.
+    /// The Receiver may be dropped if you don't care about the errors -- these error messages will be logged regardless.
+    /// The return value will be None if the stream is already closed.
+    pub fn cancel_order(&self, tx_id: String) -> Option<oneshot::Receiver<Result<(), String>>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        if self
+            .sender
+            .send(LocalRequest::CancelOrder { tx_id, result_sender })
+            .is_ok()
+        {
+            Some(result_receiver)
+        } else {
+            None
+        }
+    }
+
+    /// Submit a request to cancel all orders over the websockets connection.
+    /// This must be a private connection configured with the auth token.
+    ///
+    /// Returns:
+    /// A oneshot::Reciever which yields either Ok and a count of canceled orders, or an error message from kraken.
+    /// The Receiver produces no value if the request could not be successfully placed, and this will be logged.
+    /// The Receiver may be dropped if you don't care about the errors -- these error messages will be logged regardless.
+    /// The return value will be None if the stream is already closed.
+    pub fn cancel_all_orders(&self) -> Option<oneshot::Receiver<Result<u64, String>>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        if self
+            .sender
+            .send(LocalRequest::CancelAllOrders { result_sender })
+            .is_ok()
+        {
+            Some(result_receiver)
+        } else {
+            None
+        }
+    }
 }
 
 impl Drop for KrakenWsAPI {
@@ -137,8 +291,23 @@ impl Drop for KrakenWsAPI {
     }
 }
 
-/// A request made from the local handle (KrakenWsApi) to
+/// A request made from the local handle (KrakenWsAPI) to
 /// the thread perfoming the websockets operations.
 enum LocalRequest {
+    /// Requests to stop the worker thread and close the connection gracefully
     Stop,
+    /// Requests to add an order to the order book
+    AddOrder {
+        request: AddOrderRequest,
+        result_sender: oneshot::Sender<Result<String, String>>,
+    },
+    /// Requests to cancel one of our orders
+    CancelOrder {
+        tx_id: String,
+        result_sender: oneshot::Sender<Result<(), String>>,
+    },
+    /// Requests to cancel all of our orders
+    CancelAllOrders {
+        result_sender: oneshot::Sender<Result<u64, String>>,
+    },
 }

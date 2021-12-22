@@ -1,12 +1,13 @@
-use ctrlc::set_handler;
 use displaydoc::Display;
 use env_logger::{fmt::Color, Builder, Env};
+use futures::executor::block_on;
 use krakenrs::{
     ws::{KrakenPrivateWsConfig, KrakenWsAPI, KrakenWsConfig},
-    KrakenCredentials, KrakenRestAPI, KrakenRestConfig,
+    BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
 };
 use log::Level;
 use std::{
+    collections::BTreeSet,
     convert::TryFrom,
     io::Write,
     path::PathBuf,
@@ -23,6 +24,10 @@ struct KrakFeedConfig {
     /// Credentials file, formatted in json. Required only for private APIs
     #[structopt(parse(from_os_str))]
     creds: Option<PathBuf>,
+
+    /// Whether to pass "validate = true" with any orders (for testing)
+    #[structopt(short, long)]
+    validate: bool,
 }
 
 /// Commands supported by krak-feed executable
@@ -31,11 +36,64 @@ enum Command {
     /// Get websockets feed for one or more asset-pair books
     Book { pairs: Vec<String> },
 
-    /// Get websockets feed for own orders
-    OwnOrders {},
+    /// Get websockets feed for own open orders
+    OpenOrders {},
+
+    /// Market buy order: {volume} {pair}
+    MarketBuy { volume: String, pair: String },
+
+    /// Market sell order: {volume} {pair}
+    MarketSell { volume: String, pair: String },
+
+    /// Limit buy order: {volume} {pair} @ {price}
+    LimitBuy {
+        volume: String,
+        pair: String,
+        price: String,
+    },
+
+    /// Limit sell order: {volume} {pair} @ {price}
+    LimitSell {
+        volume: String,
+        pair: String,
+        price: String,
+    },
+
+    /// Cancel order: {id}
+    CancelOrder { id: String },
+
+    /// Cancel all orders
+    CancelAllOrders,
 }
 
 static PROCESS_TERMINATING: AtomicBool = AtomicBool::new(false);
+
+// Helper: Get a private websockets connection
+fn get_private_websockets_api(creds: &Option<PathBuf>) -> KrakenWsAPI {
+    // First get a websockets token
+    let mut kc_config = KrakenRestConfig::default();
+
+    // Load credentials from disk if specified
+    let creds = creds.as_ref().expect("Missing credentials");
+
+    log::info!("Credentials path: {:?}", creds);
+    kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
+
+    let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
+    let token = api
+        .get_websockets_token()
+        .expect("could not get websockets token")
+        .token;
+
+    let ws_config = KrakenWsConfig {
+        private: Some(KrakenPrivateWsConfig {
+            token,
+            subscribe_open_orders: true,
+        }),
+        ..Default::default()
+    };
+    KrakenWsAPI::new(ws_config).expect("could not connect to websockets api")
+}
 
 pub fn main() {
     // Default to INFO log level for everything if we do not have an explicit
@@ -67,8 +125,6 @@ pub fn main() {
         .init();
 
     let config = KrakFeedConfig::from_args();
-
-    set_handler(|| PROCESS_TERMINATING.store(true, Ordering::SeqCst)).expect("could not set termination handler");
 
     match config.command {
         Command::Book { pairs } => {
@@ -107,37 +163,10 @@ pub fn main() {
                     log::info!("Stream closed");
                     return;
                 }
-
-                if PROCESS_TERMINATING.load(Ordering::SeqCst) {
-                    log::debug!("Process terminating");
-                    return;
-                }
             }
         }
-        Command::OwnOrders {} => {
-            // First get a websockets token
-            let mut kc_config = KrakenRestConfig::default();
-
-            // Load credentials from disk if specified
-            if let Some(creds) = config.creds {
-                log::info!("Credentials path: {:?}", creds);
-                kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
-            }
-
-            let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
-            let token = api
-                .get_websockets_token()
-                .expect("could not get websockets token")
-                .token;
-
-            let ws_config = KrakenWsConfig {
-                private: Some(KrakenPrivateWsConfig {
-                    token,
-                    subscribe_open_orders: true,
-                }),
-                ..Default::default()
-            };
-            let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
+        Command::OpenOrders {} => {
+            let api = get_private_websockets_api(&config.creds);
 
             let mut prev = api.get_open_orders();
 
@@ -160,6 +189,110 @@ pub fn main() {
                     log::debug!("Process terminating");
                     return;
                 }
+            }
+        }
+        Command::MarketBuy { volume, pair } => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let result = api
+                .add_market_order(
+                    MarketOrder {
+                        bs_type: BsType::Buy,
+                        volume,
+                        pair,
+                        oflags: Default::default(),
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            match block_on(result).expect("Failed to submit order") {
+                Ok(tx_id) => log::info!("Success: tx_id = {}", tx_id),
+                Err(err) => log::error!("Failed: {}", err),
+            }
+        }
+        Command::MarketSell { volume, pair } => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let result = api
+                .add_market_order(
+                    MarketOrder {
+                        bs_type: BsType::Sell,
+                        volume,
+                        pair,
+                        oflags: Default::default(),
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            match block_on(result).expect("Failed to submit order") {
+                Ok(tx_id) => log::info!("Success: tx_id = {}", tx_id),
+                Err(err) => log::error!("Failed: {}", err),
+            }
+        }
+        Command::LimitBuy { volume, pair, price } => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let mut oflags = BTreeSet::new();
+            oflags.insert(OrderFlag::Post);
+            let result = api
+                .add_limit_order(
+                    LimitOrder {
+                        bs_type: BsType::Buy,
+                        volume,
+                        pair,
+                        price,
+                        oflags,
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            match block_on(result).expect("Failed to submit order") {
+                Ok(tx_id) => log::info!("Success: tx_id = {}", tx_id),
+                Err(err) => log::error!("Failed: {}", err),
+            }
+        }
+        Command::LimitSell { volume, pair, price } => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let mut oflags = BTreeSet::new();
+            oflags.insert(OrderFlag::Post);
+            let result = api
+                .add_limit_order(
+                    LimitOrder {
+                        bs_type: BsType::Sell,
+                        volume,
+                        pair,
+                        price,
+                        oflags,
+                    },
+                    None,
+                    config.validate,
+                )
+                .expect("api call failed");
+            match block_on(result).expect("Failed to submit order") {
+                Ok(tx_id) => log::info!("Success: tx_id = {}", tx_id),
+                Err(err) => log::error!("Failed: {}", err),
+            }
+        }
+        Command::CancelOrder { id } => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let result = api.cancel_order(id).expect("api call failed");
+            match block_on(result).expect("Failed to submit request") {
+                Ok(()) => log::info!("Success"),
+                Err(err) => log::error!("Failed: {}", err),
+            }
+        }
+        Command::CancelAllOrders {} => {
+            let api = get_private_websockets_api(&config.creds);
+
+            let result = api.cancel_all_orders().expect("api call failed");
+            match block_on(result).expect("Failed to submit request") {
+                Ok(num) => log::info!("Success, {} orders canceled", num),
+                Err(err) => log::error!("Failed: {}", err),
             }
         }
     };

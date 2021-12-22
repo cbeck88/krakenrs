@@ -90,6 +90,21 @@ pub enum BsType {
     Sell,
 }
 
+impl Default for BsType {
+    fn default() -> Self {
+        Self::Sell
+    }
+}
+
+impl From<crate::BsType> for BsType {
+    fn from(src: crate::BsType) -> Self {
+        match src {
+            crate::BsType::Buy => Self::Buy,
+            crate::BsType::Sell => Self::Sell,
+        }
+    }
+}
+
 /// Possible order types in Kraken.
 /// These are kebab-case strings in json
 #[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
@@ -109,6 +124,12 @@ pub enum OrderType {
     TakeProfitLimit,
     /// Settle-Position
     SettlePosition,
+}
+
+impl Default for OrderType {
+    fn default() -> Self {
+        Self::Limit
+    }
 }
 
 /// Possible order statuses in Kraken.
@@ -193,6 +214,17 @@ impl FromStr for OrderFlag {
     }
 }
 
+impl From<crate::OrderFlag> for OrderFlag {
+    fn from(src: crate::OrderFlag) -> Self {
+        match src {
+            crate::OrderFlag::Post => Self::Post,
+            crate::OrderFlag::Fcib => Self::Fcib,
+            crate::OrderFlag::Fciq => Self::Fciq,
+            crate::OrderFlag::Nompp => Self::Nompp,
+        }
+    }
+}
+
 /// Possible miscellaneous info flags in Kraken.
 /// These are options in a comma-separated list
 #[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -238,4 +270,40 @@ pub struct OrderDescriptionInfo {
     pub leverage: Option<Decimal>,
     /// human-readable description
     pub order: String,
+}
+
+/// Add order request (websockets)
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AddOrderRequest {
+    /// The event will be "addOrder"
+    pub event: String,
+    /// The token used to authenticate
+    pub token: String,
+    /// A req-id associated to the order
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reqid: Option<u64>,
+    /// A user ref id for this order
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub userref: Option<UserRefId>,
+    /// order type
+    pub ordertype: OrderType,
+    /// type of order (buy/sell)
+    #[serde(rename = "type")]
+    pub bs_type: BsType,
+    /// volume (in lots)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub volume: String,
+    /// pair (AssetPair id or altname)
+    pub pair: String,
+    /// price
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub price: String,
+    /// order flags (comma separated list)
+    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub oflags: BTreeSet<OrderFlag>,
+    /// validate: If true, do not submit order
+    #[serde(with = "serde_with::rust::display_fromstr")]
+    #[serde(skip_serializing_if = "core::ops::Not::not")]
+    pub validate: bool,
 }

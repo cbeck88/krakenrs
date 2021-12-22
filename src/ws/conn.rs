@@ -772,10 +772,13 @@ impl KrakenWsClient {
             .ok_or("missing req_id field")?
             .as_u64()
             .ok_or("reqid wasnt an integer")?;
-        let sender = self
-            .cancel_order_result_senders
-            .remove(&req_id)
-            .ok_or("unknown cancel_order reqid")?;
+        let sender = if let Some(sender) = self.cancel_order_result_senders.remove(&req_id) {
+            sender
+        } else {
+            log::debug!("unknown cancel_order reqid ({})\nThis is not always a problem, if a cancel order is placed for multiple orders we only return the first result", req_id);
+            return Ok(());
+        };
+
         let status = map
             .get("status")
             .ok_or("missing status field")?

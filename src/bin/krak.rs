@@ -1,12 +1,15 @@
 use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
-use krakenrs::{
-    BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
-};
+use env_logger::{fmt::Color, Builder, Env};
+use krakenrs::{BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag};
+use log::Level;
 use serde::Serialize;
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Write,
+    path::PathBuf,
+};
 use structopt::StructOpt;
 
 /// Structure representing parsed command-line arguments to krak executable
@@ -71,22 +74,50 @@ enum Command {
 fn log_value<T: Serialize + Debug>(val: &T) {
     match serde_json::to_string_pretty(val) {
         Ok(pretty) => {
-            println!("{}", pretty);
+            log::info!("{}", pretty);
         }
         Err(err) => {
-            eprintln!("Could not pretty-print structure: {:?}: {}", val, err);
+            log::error!("Could not pretty-print structure: {:?}: {}", val, err);
         }
     }
 }
 
 fn main() {
+    // Default to INFO log level for everything if we do not have an explicit
+    // setting.
+    Builder::from_env(Env::default().default_filter_or("info"))
+        .format(|buf, record| {
+            let mut style = buf.style();
+
+            let color = match record.level() {
+                Level::Error => Color::Red,
+                Level::Warn => Color::Yellow,
+                Level::Info => Color::Green,
+                Level::Debug => Color::Cyan,
+                Level::Trace => Color::Magenta,
+            };
+            style.set_color(color).set_bold(true);
+
+            writeln!(
+                buf,
+                "{} {} [{} {}:{}] {}",
+                chrono::Utc::now(),
+                style.value(record.level()),
+                record.module_path().unwrap_or("?"),
+                record.file().unwrap_or("?"),
+                record.line().unwrap_or(0),
+                record.args(),
+            )
+        })
+        .init();
+
     let config = KrakConfig::from_args();
 
     let mut kc_config = KrakenRestConfig::default();
 
     // Load credentials from disk if specified
     if let Some(creds) = config.creds {
-        eprintln!("Credentials path: {:?}", creds);
+        log::info!("Credentials path: {:?}", creds);
         kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
     }
 
@@ -139,9 +170,7 @@ fn main() {
             log_value(&result);
         }
         Command::CancelAllOrdersAfter { timeout } => {
-            let result = api
-                .cancel_all_orders_after(timeout)
-                .expect("api call failed");
+            let result = api.cancel_all_orders_after(timeout).expect("api call failed");
             log_value(&result);
         }
         Command::MarketBuy { volume, pair } => {
@@ -174,11 +203,7 @@ fn main() {
                 .expect("api call failed");
             log_value(&result);
         }
-        Command::LimitBuy {
-            volume,
-            pair,
-            price,
-        } => {
+        Command::LimitBuy { volume, pair, price } => {
             let mut oflags = BTreeSet::new();
             oflags.insert(OrderFlag::Post);
             let result = api
@@ -196,11 +221,7 @@ fn main() {
                 .expect("api call failed");
             log_value(&result);
         }
-        Command::LimitSell {
-            volume,
-            pair,
-            price,
-        } => {
+        Command::LimitSell { volume, pair, price } => {
             let mut oflags = BTreeSet::new();
             oflags.insert(OrderFlag::Post);
             let result = api

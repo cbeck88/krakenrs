@@ -103,9 +103,7 @@ impl KrakenWsClient {
     ///   up as you like.
     /// * Arc<WsApiResults>. This may be shared with synchronous code and polled for updates.
     ///   Note: KrakenWsAPI also conceals this detail.
-    pub async fn new(
-        config: KrakenWsConfig,
-    ) -> Result<(Self, SplitStream<WsClient>, Arc<WsAPIResults>), Error> {
+    pub async fn new(config: KrakenWsConfig) -> Result<(Self, SplitStream<WsClient>, Arc<WsAPIResults>), Error> {
         let url = if config.private.is_some() {
             Url::parse("wss://ws-auth.kraken.com").unwrap()
         } else {
@@ -132,10 +130,8 @@ impl KrakenWsClient {
         };
 
         for pair in config.subscribe_book.iter() {
-            result
-                .subscription_tracker
-                .get_book(pair.to_string())
-                .last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+            result.subscription_tracker.get_book(pair.to_string()).last_request =
+                Some((SubscriptionStatus::Subscribed, Instant::now()));
             result.subscribe_book(pair.to_string()).await?;
         }
 
@@ -165,7 +161,7 @@ impl KrakenWsClient {
                 self.handle_kraken_text(text);
             }
             Ok(Message::Binary(_)) => {
-                eprintln!("Warn: Unexpected binary message from Kraken");
+                log::warn!("Unexpected binary message from Kraken");
             }
             Ok(Message::Ping(_)) => {}
             Ok(Message::Pong(_)) => {}
@@ -184,38 +180,24 @@ impl KrakenWsClient {
     pub async fn check_subscriptions(&mut self) {
         // First look for active subscriptions with errors and try to unsubscribe
         for (asset_pair, sub) in self.subscription_tracker.book_subscriptions.iter_mut() {
-            if sub.status.is_subscribed()
-                && sub.needs_unsubscribe
-                && !sub.tried_to_change_recently()
-            {
+            if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
                 drop(sub);
-                if let Err(err) = Self::unsubscribe_book(
-                    &mut self.sink,
-                    self.config.book_depth,
-                    asset_pair.clone(),
-                )
-                .await
+                if let Err(err) =
+                    Self::unsubscribe_book(&mut self.sink, self.config.book_depth, asset_pair.clone()).await
                 {
-                    eprintln!(
-                        "Error: Could not unsubscribe from book {}: {}",
-                        asset_pair.clone(),
-                        err
-                    );
+                    log::error!("Could not unsubscribe from book {}: {}", asset_pair.clone(), err);
                 }
             }
         }
 
         {
             let mut sub = self.subscription_tracker.get_open_orders();
-            if sub.status.is_subscribed()
-                && sub.needs_unsubscribe
-                && !sub.tried_to_change_recently()
-            {
+            if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
                 drop(sub);
                 if let Err(err) = self.unsubscribe_open_orders().await {
-                    eprintln!("Error: Could not unsubscribe from open orders: {}", err);
+                    log::error!("Could not unsubscribe from open orders: {}", err);
                 }
             }
         }
@@ -225,14 +207,11 @@ impl KrakenWsClient {
         for asset_pair in self.config.subscribe_book.clone() {
             let mut sub = self.subscription_tracker.get_book(asset_pair.to_string());
             if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
-                eprintln!("Info: Resubscribing to book '{}'", asset_pair);
+                log::info!("Resubscribing to book '{}'", asset_pair);
                 sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
                 drop(sub);
                 if let Err(err) = self.subscribe_book(asset_pair.to_string()).await {
-                    eprintln!(
-                        "Error: Could not subscribe to book '{}': {}",
-                        asset_pair, err
-                    );
+                    log::error!("Could not subscribe to book '{}': {}", asset_pair, err);
                 }
             }
         }
@@ -241,11 +220,11 @@ impl KrakenWsClient {
             if private_config.subscribe_open_orders {
                 let mut sub = self.subscription_tracker.get_open_orders();
                 if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
-                    eprintln!("Info: Resubscribing to openOrders");
+                    log::info!("Resubscribing to openOrders");
                     sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
                     drop(sub);
                     if let Err(err) = self.subscribe_open_orders().await {
-                        eprintln!("Error: Could not subscribe to openOrders: {}", err);
+                        log::error!("Could not subscribe to openOrders: {}", err);
                     }
                 }
             }
@@ -274,11 +253,7 @@ impl KrakenWsClient {
     /// Unsubscribe from a book stream
     ///
     /// Note: We made this not take self, to resolve a borrow checker issue
-    async fn unsubscribe_book(
-        sink: &mut SinkType,
-        book_depth: usize,
-        pair: String,
-    ) -> Result<(), Error> {
+    async fn unsubscribe_book(sink: &mut SinkType, book_depth: usize, pair: String) -> Result<(), Error> {
         let payload = json!({
             "event": "unsubscribe",
             "pair": [pair],
@@ -330,45 +305,36 @@ impl KrakenWsClient {
                 if let Some(event) = map.get("event") {
                     if event == "subscriptionStatus" {
                         if let Err(err) = self.handle_subscription_status(map) {
-                            eprintln!("Error: handling subscription status: {}\n{}", err, text)
+                            log::error!("handling subscription status: {}\n{}", err, text)
                         }
                     } else if event == "systemStatus" {
                         if let Err(err) = self.handle_system_status(map) {
-                            eprintln!("Error: handling system status: {}\n{}", err, text)
+                            log::error!("handling system status: {}\n{}", err, text)
                         }
                     } else if event == "pong" || event == "heartbeat" {
                         // nothing to do
                     } else {
-                        eprintln!("Error: Unknown event from kraken: {}\n{}", event, text);
+                        log::error!("Unknown event from kraken: {}\n{}", event, text);
                     }
                 } else {
-                    eprintln!(
-                        "Error: Missing event string in payload from Kraken: {}",
-                        text
-                    );
+                    log::error!("Missing event string in payload from Kraken: {}", text);
                 }
             }
             Ok(Value::Array(array)) => {
                 if let Err(err) = self.handle_array(array) {
-                    eprintln!("Error: handling array payload: {}\n{}", err, text);
+                    log::error!("handling array payload: {}\n{}", err, text);
                 }
             }
             Ok(val) => {
-                eprintln!("Error: Unexpected json value from Kraken: {:?}", val);
+                log::error!("Unexpected json value from Kraken: {:?}", val);
             }
             Err(err) => {
-                eprintln!(
-                    "Error: Could not deserialize json from Kraken: {}\n{}",
-                    err, text
-                );
+                log::error!("Could not deserialize json from Kraken: {}\n{}", err, text);
             }
         }
     }
 
-    fn handle_subscription_status(
-        &mut self,
-        map: serde_json::Map<String, Value>,
-    ) -> Result<(), &'static str> {
+    fn handle_subscription_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
         let status = SubscriptionStatus::from_str(
             map.get("status")
                 .ok_or("Missing status")?
@@ -382,7 +348,7 @@ impl KrakenWsClient {
                     .ok_or("missing errorMessage")?
                     .as_str()
                     .ok_or("errorMessage is not a string")?;
-                eprintln!("subscription error: {}", err_msg);
+                log::error!("subscription error: {}", err_msg);
                 return Err("subscription error");
             }
             SubscriptionStatus::Subscribed | SubscriptionStatus::Unsubscribed => {
@@ -414,14 +380,13 @@ impl KrakenWsClient {
                             .ok_or("pair was not a string")?
                             .clone();
 
-                        self.subscription_tracker
-                            .add_book_channel(channel_name.to_string());
+                        self.subscription_tracker.add_book_channel(channel_name.to_string());
                         let sub = self.subscription_tracker.get_book(pair.to_string());
                         if sub.status != status {
-                            eprintln!("{} @ {} book: {}", status, pair, channel_name);
+                            log::info!("{} @ {} book: {}", status, pair, channel_name);
                             *sub = SubscriptionState::new(status);
                         } else {
-                            eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                            log::warn!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
                     SubscriptionType::OpenOrders => {
@@ -429,14 +394,14 @@ impl KrakenWsClient {
                         if sub.status != status {
                             *sub = SubscriptionState::new(status);
                             if status.is_subscribed() {
-                                eprintln!("Subscribed to {}", channel_name);
+                                log::info!("Subscribed to {}", channel_name);
                                 self.open_orders_sequence_number = Some(0);
                             } else {
-                                eprintln!("Unsubscribed from {}", channel_name);
+                                log::info!("Unsubscribed from {}", channel_name);
                                 self.open_orders_sequence_number = None;
                             }
                         } else {
-                            eprintln!("Unexpected repeated {} message: {:?}", status, map);
+                            log::warn!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
                 }
@@ -473,9 +438,7 @@ impl KrakenWsClient {
                     .ok_or("unexpected openOrders message")?;
                 if *our_seq_number + 1 != sequence_number {
                     // We need to try to resubscribe to open orders now
-                    self.subscription_tracker
-                        .get_open_orders()
-                        .needs_unsubscribe = true;
+                    self.subscription_tracker.get_open_orders().needs_unsubscribe = true;
                     return Err("openOrders sequence number mismatch");
                 }
                 *our_seq_number += 1;
@@ -488,10 +451,7 @@ impl KrakenWsClient {
                 .as_array()
                 .ok_or("updates were not an array")?;
             for update in updates {
-                for (order_id, val) in update
-                    .as_object()
-                    .ok_or("expected update to be an object")?
-                {
+                for (order_id, val) in update.as_object().ok_or("expected update to be an object")? {
                     match open_orders.entry(order_id.to_string()) {
                         Entry::Occupied(mut entry) => {
                             // This is likely a status update, lets see what to do
@@ -500,26 +460,23 @@ impl KrakenWsClient {
                                 .ok_or("order update was not an object")?
                                 .get("status")
                                 .ok_or("order update missing status")?;
-                            let status: OrderStatus = serde_json::from_value(status.clone())
-                                .map_err(|err| {
-                                    eprintln!("Could not parse order status: {}", err);
-                                    "OrderStatus deserialization error"
-                                })?;
+                            let status: OrderStatus = serde_json::from_value(status.clone()).map_err(|err| {
+                                log::error!("Could not parse order status: {}", err);
+                                "OrderStatus deserialization error"
+                            })?;
                             match status {
                                 OrderStatus::Pending | OrderStatus::Open => {
                                     entry.get_mut().status = status;
                                 }
-                                OrderStatus::Closed
-                                | OrderStatus::Expired
-                                | OrderStatus::Canceled => {
+                                OrderStatus::Closed | OrderStatus::Expired | OrderStatus::Canceled => {
                                     entry.remove();
                                 }
                             }
                         }
                         Entry::Vacant(entry) => {
                             // Parse the data as an OrderInfo object and add the new order id
-                            let order_info : OrderInfo = serde_json::from_value(val.clone()).map_err(|err| {
-                                eprintln!("Could not parse open order data as an OrderInfo object: {}", err);
+                            let order_info: OrderInfo = serde_json::from_value(val.clone()).map_err(|err| {
+                                log::error!("Could not parse open order data as an OrderInfo object: {}", err);
                                 "OrderInfo deserialization error"
                             })?;
                             entry.insert(order_info);
@@ -547,7 +504,7 @@ impl KrakenWsClient {
                 .output
                 .book
                 .get(pair)
-                .ok_or("missing asset pair in api results")?
+                .ok_or("unexpected asset pair update -- check asset pair name")?
                 .lock()
                 .expect("mutex poisoned");
 
@@ -584,20 +541,15 @@ impl KrakenWsClient {
                     }
                     // If we got a checksum, lets check it
                     if let Some(check_val) = obj.get("c") {
-                        let expected_checksum = u32::from_str(
-                            check_val
-                                .as_str()
-                                .ok_or("checksum value was not a string")?,
-                        )
-                        .map_err(|_| "checksum value could not parse as u32")?;
+                        let expected_checksum =
+                            u32::from_str(check_val.as_str().ok_or("checksum value was not a string")?)
+                                .map_err(|_| "checksum value could not parse as u32")?;
                         let checksum = book.checksum();
                         if checksum != expected_checksum {
-                            eprintln!("Error: checksum mismatch, book is out of sync.");
+                            log::error!("Error: checksum mismatch, book is out of sync.");
                             book.checksum_failed = true;
                             drop(book);
-                            self.subscription_tracker
-                                .get_book(pair.to_string())
-                                .needs_unsubscribe = true;
+                            self.subscription_tracker.get_book(pair.to_string()).needs_unsubscribe = true;
                             return Err("checksum mismatch");
                         }
                     }
@@ -611,10 +563,7 @@ impl KrakenWsClient {
         }
     }
 
-    fn handle_system_status(
-        &mut self,
-        map: serde_json::Map<String, Value>,
-    ) -> Result<(), &'static str> {
+    fn handle_system_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
         let status = SystemStatus::from_str(
             map.get("status")
                 .ok_or("missing status field")?
@@ -687,9 +636,7 @@ impl SubscriptionState {
     /// rather than try to change it again.
     pub fn tried_to_change_recently(&self) -> bool {
         self.last_request
-            .map(|(stat, time)| {
-                stat != self.status && time + SUBSCRIPTION_CHANGE_BACKOFF > Instant::now()
-            })
+            .map(|(stat, time)| stat != self.status && time + SUBSCRIPTION_CHANGE_BACKOFF > Instant::now())
             .unwrap_or(false)
     }
 }

@@ -8,14 +8,14 @@ pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
-    unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest,
-    CancelOrderRequest, Empty, GetOpenOrdersRequest, KrakenResult, TickerRequest,
+    unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty,
+    GetOpenOrdersRequest, KrakenResult, TickerRequest,
 };
 pub use messages::{
     AddOrderResponse, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse, BsType,
-    CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse,
-    GetOpenOrdersResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
-    OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, GetOpenOrdersResponse,
+    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse,
+    TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -68,15 +68,13 @@ impl KrakenRestAPI {
 
     /// (Public) Get the kraken system's status
     pub fn system_status(&self) -> Result<SystemStatusResponse> {
-        let result: Result<KrakenResult<SystemStatusResponse>> =
-            self.client.query_public("SystemStatus", Empty {});
+        let result: Result<KrakenResult<SystemStatusResponse>> = self.client.query_public("SystemStatus", Empty {});
         result.and_then(unpack_kraken_result)
     }
 
     /// (Public) Get the list of kraken's supported assets, and info
     pub fn assets(&self) -> Result<AssetsResponse> {
-        let result: Result<KrakenResult<AssetsResponse>> =
-            self.client.query_public("Assets", Empty {});
+        let result: Result<KrakenResult<AssetsResponse>> = self.client.query_public("Assets", Empty {});
         result.and_then(unpack_kraken_result)
     }
 
@@ -85,12 +83,9 @@ impl KrakenRestAPI {
     /// Arguments:
     /// * pairs: A list of Kraken asset pair strings to get info about. If empty then all asset pairs
     pub fn asset_pairs(&self, pairs: Vec<String>) -> Result<AssetPairsResponse> {
-        let result: Result<KrakenResult<AssetPairsResponse>> = self.client.query_public(
-            "AssetPairs",
-            AssetPairsRequest {
-                pair: pairs.join(","),
-            },
-        );
+        let result: Result<KrakenResult<AssetPairsResponse>> = self
+            .client
+            .query_public("AssetPairs", AssetPairsRequest { pair: pairs.join(",") });
         result.and_then(unpack_kraken_result)
     }
 
@@ -99,19 +94,15 @@ impl KrakenRestAPI {
     /// Arguments:
     /// * pairs: A list of Kraken asset pair strings to get ticker info about
     pub fn ticker(&self, pairs: Vec<String>) -> Result<TickerResponse> {
-        let result: Result<KrakenResult<TickerResponse>> = self.client.query_public(
-            "Ticker",
-            TickerRequest {
-                pair: pairs.join(","),
-            },
-        );
+        let result: Result<KrakenResult<TickerResponse>> = self
+            .client
+            .query_public("Ticker", TickerRequest { pair: pairs.join(",") });
         result.and_then(unpack_kraken_result)
     }
 
     /// (Private) Get the balance
     pub fn get_account_balance(&self) -> Result<BalanceResponse> {
-        let result: Result<KrakenResult<BalanceResponse>> =
-            self.client.query_private("Balance", Empty {});
+        let result: Result<KrakenResult<BalanceResponse>> = self.client.query_private("Balance", Empty {});
         result.and_then(unpack_kraken_result)
     }
 
@@ -146,8 +137,7 @@ impl KrakenRestAPI {
 
     /// (Private) Cancel all orders (regardless of user ref or tx id)
     pub fn cancel_all_orders(&self) -> Result<CancelAllOrdersResponse> {
-        let result: Result<KrakenResult<CancelAllOrdersResponse>> =
-            self.client.query_private("CancelAll", Empty {});
+        let result: Result<KrakenResult<CancelAllOrdersResponse>> = self.client.query_private("CancelAll", Empty {});
         result.and_then(unpack_kraken_result)
     }
 
@@ -156,10 +146,9 @@ impl KrakenRestAPI {
     /// Arguments:
     /// * timeout: Integer timeout specified in seconds. 0 to disable the timer.
     pub fn cancel_all_orders_after(&self, timeout: u64) -> Result<CancelAllOrdersAfterResponse> {
-        let result: Result<KrakenResult<CancelAllOrdersAfterResponse>> = self.client.query_private(
-            "CancelAllOrdersAfter",
-            CancelAllOrdersAfterRequest { timeout },
-        );
+        let result: Result<KrakenResult<CancelAllOrdersAfterResponse>> = self
+            .client
+            .query_private("CancelAllOrdersAfter", CancelAllOrdersAfterRequest { timeout });
         result.and_then(unpack_kraken_result)
     }
 
@@ -185,8 +174,7 @@ impl KrakenRestAPI {
             userref: user_ref_id,
             validate,
         };
-        let result: Result<KrakenResult<AddOrderResponse>> =
-            self.client.query_private("AddOrder", req);
+        let result: Result<KrakenResult<AddOrderResponse>> = self.client.query_private("AddOrder", req);
         result.and_then(unpack_kraken_result)
     }
 
@@ -212,8 +200,7 @@ impl KrakenRestAPI {
             userref: user_ref_id,
             validate,
         };
-        let result: Result<KrakenResult<AddOrderResponse>> =
-            self.client.query_private("AddOrder", req);
+        let result: Result<KrakenResult<AddOrderResponse>> = self.client.query_private("AddOrder", req);
         result.and_then(unpack_kraken_result)
     }
 }

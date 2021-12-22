@@ -8,6 +8,6 @@ fn main() {
 
 #[cfg(not(feature = "ws"))]
 fn main() {
-    eprintln!("Must build with ws feature");
+    log::error!("Must build with ws feature");
     unimplemented!()
 }

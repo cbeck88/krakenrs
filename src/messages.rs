@@ -23,9 +23,7 @@ pub struct KrakenResult<ResultJson: Serialize> {
 }
 
 /// Convert KrakenResult<T> to Result<T>
-pub fn unpack_kraken_result<ResultJson: Serialize>(
-    src: KrakenResult<ResultJson>,
-) -> Result<ResultJson> {
+pub fn unpack_kraken_result<ResultJson: Serialize>(src: KrakenResult<ResultJson>) -> Result<ResultJson> {
     if !src.error.is_empty() {
         return Err(Error::KrakenErrors(src.error));
     }

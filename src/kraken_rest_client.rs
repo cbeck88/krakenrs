@@ -54,16 +54,10 @@ impl KrakenCredentials {
         let creds_file = std::fs::read_to_string(path)?;
         let creds_data: KrakenCredentials = serde_json::from_str(&creds_file)?;
         if creds_data.key.is_empty() {
-            return Err(IoError::new(
-                ErrorKind::Other,
-                "Missing credentials 'key' value",
-            ));
+            return Err(IoError::new(ErrorKind::Other, "Missing credentials 'key' value"));
         }
         if creds_data.secret.is_empty() {
-            return Err(IoError::new(
-                ErrorKind::Other,
-                "Missing credentials 'secret' value",
-            ));
+            return Err(IoError::new(ErrorKind::Other, "Missing credentials 'secret' value"));
         }
         Ok(creds_data)
     }
@@ -90,10 +84,7 @@ impl TryFrom<KrakenRestConfig> for KrakenRestClient {
         let base_url = Url::from_str("https://api.kraken.com/")?;
         let version = 0;
         let client = reqwest::blocking::ClientBuilder::new()
-            .user_agent(format!(
-                "krakenrs/{}",
-                KRAKEN_RS_VERSION.unwrap_or("unknown")
-            ))
+            .user_agent(format!("krakenrs/{}", KRAKEN_RS_VERSION.unwrap_or("unknown")))
             .timeout(Some(config.timeout))
             .build()?;
         Ok(Self {
@@ -112,25 +103,17 @@ impl KrakenRestClient {
     }
 
     /// Execute a public API, given method, and object matching the expected schema, and returning expected schema or an error.
-    pub fn query_public<D: Serialize, R: DeserializeOwned>(
-        &self,
-        method: &str,
-        query_data: D,
-    ) -> Result<R> {
+    pub fn query_public<D: Serialize, R: DeserializeOwned>(&self, method: &str, query_data: D) -> Result<R> {
         let url_path = format!("/{}/public/{}", self.version, method);
 
         let post_data = serde_qs::to_string(&query_data)?;
-        //eprintln!("post_data = {}", post_data);
+        //log::debug!("post_data = {}", post_data);
 
         self.query(&url_path, HeaderMap::new(), post_data)
     }
 
     /// Execute a private API, given method, and object matching the expected schema, and returning expected schema or an error.
-    pub fn query_private<D: Serialize, R: DeserializeOwned>(
-        &self,
-        method: &str,
-        query_data: D,
-    ) -> Result<R> {
+    pub fn query_private<D: Serialize, R: DeserializeOwned>(&self, method: &str, query_data: D) -> Result<R> {
         if self.config.creds.key.is_empty() || self.config.creds.secret.is_empty() {
             return Err(Error::MissingCredentials);
         }
@@ -148,30 +131,19 @@ impl KrakenRestClient {
     }
 
     /// Send a query (public or private) to kraken API, and interpret response as JSON
-    fn query<R: DeserializeOwned>(
-        &self,
-        url_path: &str,
-        headers: HeaderMap,
-        post_data: String,
-    ) -> Result<R> {
+    fn query<R: DeserializeOwned>(&self, url_path: &str, headers: HeaderMap, post_data: String) -> Result<R> {
         let url = self.base_url.join(url_path)?;
 
-        //eprintln!("POST {}\n{}", url_path, post_data);
+        //log::trace!("POST {}\n{}", url_path, post_data);
 
-        let response = self
-            .client
-            .post(url)
-            .headers(headers)
-            .body(post_data)
-            .send()?;
+        let response = self.client.post(url).headers(headers).body(post_data).send()?;
         if !(response.status() == 200 || response.status() == 201 || response.status() == 202) {
             return Err(Error::BadStatus(response));
         }
 
         let text = response.text()?;
 
-        let result: R =
-            serde_json::from_str(&text).map_err(|err| Error::Json(err, text.clone()))?;
+        let result: R = serde_json::from_str(&text).map_err(|err| Error::Json(err, text.clone()))?;
         Ok(result)
     }
 
@@ -206,8 +178,7 @@ impl KrakenRestClient {
         let hmac_sha_key = base64::decode(&self.config.creds.secret).map_err(Error::SigningB64)?;
 
         type HmacSha = Hmac<Sha512>;
-        let mut mac =
-            HmacSha::new_varkey(&hmac_sha_key).expect("Hmac should work with any key length");
+        let mut mac = HmacSha::new_varkey(&hmac_sha_key).expect("Hmac should work with any key length");
         mac.update(url_path.as_bytes());
         mac.update(&sha2_result);
         let mac = mac.finalize().into_bytes();

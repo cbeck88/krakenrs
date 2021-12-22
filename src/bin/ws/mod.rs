@@ -1,11 +1,14 @@
 use ctrlc::set_handler;
 use displaydoc::Display;
+use env_logger::{fmt::Color, Builder, Env};
 use krakenrs::{
     ws::{KrakenPrivateWsConfig, KrakenWsAPI, KrakenWsConfig},
     KrakenCredentials, KrakenRestAPI, KrakenRestConfig,
 };
+use log::Level;
 use std::{
     convert::TryFrom,
+    io::Write,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -35,10 +38,37 @@ enum Command {
 static PROCESS_TERMINATING: AtomicBool = AtomicBool::new(false);
 
 pub fn main() {
+    // Default to INFO log level for everything if we do not have an explicit
+    // setting.
+    Builder::from_env(Env::default().default_filter_or("info"))
+        .format(|buf, record| {
+            let mut style = buf.style();
+
+            let color = match record.level() {
+                Level::Error => Color::Red,
+                Level::Warn => Color::Yellow,
+                Level::Info => Color::Green,
+                Level::Debug => Color::Cyan,
+                Level::Trace => Color::Magenta,
+            };
+            style.set_color(color).set_bold(true);
+
+            writeln!(
+                buf,
+                "{} {} [{} {}:{}] {}",
+                chrono::Utc::now(),
+                style.value(record.level()),
+                record.module_path().unwrap_or("?"),
+                record.file().unwrap_or("?"),
+                record.line().unwrap_or(0),
+                record.args(),
+            )
+        })
+        .init();
+
     let config = KrakFeedConfig::from_args();
 
-    set_handler(|| PROCESS_TERMINATING.store(true, Ordering::SeqCst))
-        .expect("could not set termination handler");
+    set_handler(|| PROCESS_TERMINATING.store(true, Ordering::SeqCst)).expect("could not set termination handler");
 
     match config.command {
         Command::Book { pairs } => {
@@ -74,12 +104,12 @@ pub fn main() {
                 }
 
                 if api.stream_closed() {
-                    println!("Stream closed");
+                    log::info!("Stream closed");
                     return;
                 }
 
                 if PROCESS_TERMINATING.load(Ordering::SeqCst) {
-                    eprintln!("Process terminating");
+                    log::debug!("Process terminating");
                     return;
                 }
             }
@@ -90,9 +120,8 @@ pub fn main() {
 
             // Load credentials from disk if specified
             if let Some(creds) = config.creds {
-                eprintln!("Credentials path: {:?}", creds);
-                kc_config.creds =
-                    KrakenCredentials::load_json_file(creds).expect("credential file error");
+                log::info!("Credentials path: {:?}", creds);
+                kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
             }
 
             let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
@@ -123,12 +152,12 @@ pub fn main() {
                 }
 
                 if api.stream_closed() {
-                    println!("Stream closed");
+                    log::info!("Stream closed");
                     return;
                 }
 
                 if PROCESS_TERMINATING.load(Ordering::SeqCst) {
-                    eprintln!("Process terminating");
+                    log::debug!("Process terminating");
                     return;
                 }
             }

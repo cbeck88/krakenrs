@@ -44,58 +44,53 @@ impl KrakenWsAPI {
         // The runtime is created before spawning the thread
         // to more cleanly forward errors if the `unwrap()`
         // panics.
-        let rt = runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
 
         let (mut client, mut stream, output) = rt.block_on(KrakenWsClient::new(src))?;
         let (sender, mut receiver) = mpsc::unbounded_channel();
 
-        let worker_thread = Some(
-            thread::Builder::new()
-                .name("kraken-ws-internal-runtime".into())
-                .spawn(move || {
-                    rt.block_on( async move {
-            loop {
-                tokio::select!{
-                    stream_result = stream.next() => {
-                        match stream_result {
-                            Some(result) => {
-                                match client.update(result) {
-                                    Ok(()) => {
-                                        // Maybe adjust subscriptions, closing corrupted subscriptions,
-                                        // and resubscribing to any subscriptions that are missing for a while
-                                        // to any subscriptions that were canceled
-                                        client.check_subscriptions().await;
+        let worker_thread = Some(thread::Builder::new().name("kraken-ws-internal-runtime".into()).spawn(
+            move || {
+                rt.block_on(async move {
+                    loop {
+                        tokio::select! {
+                            stream_result = stream.next() => {
+                                match stream_result {
+                                    Some(result) => {
+                                        match client.update(result) {
+                                            Ok(()) => {
+                                                // Maybe adjust subscriptions, closing corrupted subscriptions,
+                                                // and resubscribing to any subscriptions that are missing for a while
+                                                // to any subscriptions that were canceled
+                                                client.check_subscriptions().await;
+                                            }
+                                            Err(err) => {
+                                                log::error!("KrakenWsClient: error, closing stream: {}", err);
+                                                drop(client.close());
+                                                return;
+                                            }
+                                        }
                                     }
-                                    Err(err) => {
-                                        eprintln!("KrakenWsClient: error, closing stream: {}", err);
+                                    None => {
+                                        log::warn!("KrakenWsClient: stream closed by kraken");
                                         drop(client.close());
                                         return;
                                     }
                                 }
                             }
-                            None => {
-                                eprintln!("KrakenWsClient: stream closed");
-                                drop(client.close());
-                                return;
+                            msg = receiver.recv() => {
+                                match msg {
+                                    None | Some(LocalRequest::Stop) => {
+                                        drop(client.close());
+                                        return;
+                                    }
+                                }
                             }
                         }
                     }
-                    msg = receiver.recv() => {
-                        match msg {
-                            None | Some(LocalRequest::Stop) => {
-                                drop(client.close());
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-        } )
-                })?,
-        );
+                })
+            },
+        )?);
         Ok(Self {
             worker_thread,
             sender,
@@ -105,11 +100,7 @@ impl KrakenWsAPI {
 
     /// Get the system status
     pub fn system_status(&self) -> Option<SystemStatus> {
-        self.output
-            .system_status
-            .lock()
-            .expect("mutex poisoned")
-            .clone()
+        self.output.system_status.lock().expect("mutex poisoned").clone()
     }
 
     /// Get all latest book data that we have subscribed to
@@ -117,22 +108,13 @@ impl KrakenWsAPI {
         self.output
             .book
             .iter()
-            .map(|(asset_pair, lock)| {
-                (
-                    asset_pair.clone(),
-                    lock.lock().expect("mutex poisoned").clone(),
-                )
-            })
+            .map(|(asset_pair, lock)| (asset_pair.clone(), lock.lock().expect("mutex poisoned").clone()))
             .collect()
     }
 
     /// Get latest openOrder data
     pub fn get_open_orders(&self) -> HashMap<String, OrderInfo> {
-        self.output
-            .open_orders
-            .lock()
-            .expect("mutex poisoned")
-            .clone()
+        self.output.open_orders.lock().expect("mutex poisoned").clone()
     }
 
     /// Check if the stream is closed. If so then we should abandon this

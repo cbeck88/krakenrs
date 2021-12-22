@@ -64,26 +64,17 @@ impl BookData {
     }
 
     // Shared code between update_asks and update_bids
-    fn update_internal(
-        side: &mut BTreeMap<Decimal, BookEntry>,
-        data: &Value,
-    ) -> Result<(), &'static str> {
+    fn update_internal(side: &mut BTreeMap<Decimal, BookEntry>, data: &Value) -> Result<(), &'static str> {
         let outer_array = data.as_array().ok_or("update was not a json array")?;
         for data in outer_array.iter() {
-            let data = data
-                .as_array()
-                .ok_or("update did not contain a json array")?;
-            let price_level_str = data[0]
-                .as_str()
-                .ok_or("price level was not a json string")?;
+            let data = data.as_array().ok_or("update did not contain a json array")?;
+            let price_level_str = data[0].as_str().ok_or("price level was not a json string")?;
             let volume_str = data[1].as_str().ok_or("volume was not a json string")?;
             let timestamp_str = data[2].as_str().ok_or("timestamp was not a json string")?;
 
-            let price_level =
-                Decimal::from_str(price_level_str).map_err(|_| "could not parse price level")?;
+            let price_level = Decimal::from_str(price_level_str).map_err(|_| "could not parse price level")?;
             let volume = Decimal::from_str(volume_str).map_err(|_| "could not parse volume")?;
-            let timestamp =
-                Decimal::from_str(timestamp_str).map_err(|_| "could not parse timestamp")?;
+            let timestamp = Decimal::from_str(timestamp_str).map_err(|_| "could not parse timestamp")?;
 
             if volume == Decimal::ZERO {
                 side.remove(&price_level);

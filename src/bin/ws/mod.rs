@@ -129,7 +129,7 @@ pub fn main() {
     match config.command {
         Command::Book { pairs } => {
             let ws_config = KrakenWsConfig {
-                subscribe_book: pairs.clone(),
+                subscribe_book: pairs,
                 book_depth: 10,
                 private: None,
             };
@@ -150,7 +150,7 @@ pub fn main() {
                         for (price, entry) in book_data.ask.iter() {
                             println!("{}\t\t{}", price, entry.volume);
                         }
-                        println!("");
+                        println!();
                         if book_data.checksum_failed {
                             println!("Checksum failed, aborting");
                             return;
@@ -176,7 +176,7 @@ pub fn main() {
                 if next != prev {
                     println!("Orders:");
                     println!("{}", serde_json::to_string_pretty(&next).unwrap());
-                    println!("");
+                    println!();
                     prev = next;
                 }
 

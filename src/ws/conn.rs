@@ -194,7 +194,6 @@ impl KrakenWsClient {
         for (asset_pair, sub) in self.subscription_tracker.book_subscriptions.iter_mut() {
             if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
-                drop(sub);
                 if let Err(err) =
                     Self::unsubscribe_book(&mut self.sink, self.config.book_depth, asset_pair.clone()).await
                 {
@@ -207,7 +206,6 @@ impl KrakenWsClient {
             let mut sub = self.subscription_tracker.get_open_orders();
             if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
-                drop(sub);
                 if let Err(err) = self.unsubscribe_open_orders().await {
                     log::error!("Could not unsubscribe from open orders: {}", err);
                 }
@@ -221,7 +219,6 @@ impl KrakenWsClient {
             if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
                 log::info!("Resubscribing to book '{}'", asset_pair);
                 sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
-                drop(sub);
                 if let Err(err) = self.subscribe_book(asset_pair.to_string()).await {
                     log::error!("Could not subscribe to book '{}': {}", asset_pair, err);
                 }
@@ -234,7 +231,6 @@ impl KrakenWsClient {
                 if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
                     log::info!("Resubscribing to openOrders");
                     sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
-                    drop(sub);
                     if let Err(err) = self.subscribe_open_orders().await {
                         log::error!("Could not subscribe to openOrders: {}", err);
                     }
@@ -519,8 +515,7 @@ impl KrakenWsClient {
                     .get("channelName")
                     .ok_or("Missing channelName")?
                     .as_str()
-                    .ok_or("channelName was not a string")?
-                    .clone();
+                    .ok_or("channelName was not a string")?;
 
                 match subscription {
                     SubscriptionType::Book => {
@@ -529,8 +524,7 @@ impl KrakenWsClient {
                             .get("pair")
                             .ok_or("Missing pair")?
                             .as_str()
-                            .ok_or("pair was not a string")?
-                            .clone();
+                            .ok_or("pair was not a string")?;
 
                         self.subscription_tracker.add_book_channel(channel_name.to_string());
                         let sub = self.subscription_tracker.get_book(pair.to_string());
@@ -576,7 +570,7 @@ impl KrakenWsClient {
             // This is an openOrders message. Check the sequence number
             {
                 let sequence_number = array
-                    .get(array.len() - 1)
+                    .last()
                     .ok_or("index invalid")?
                     .as_object()
                     .ok_or("expected an object for sequence number")?
@@ -607,12 +601,17 @@ impl KrakenWsClient {
                     match open_orders.entry(order_id.to_string()) {
                         Entry::Occupied(mut entry) => {
                             // This is likely a status update, lets see what to do
-                            let status = val
-                                .as_object()
-                                .ok_or("order update was not an object")?
-                                .get("status")
-                                .ok_or("order update missing status")?;
-                            let status: OrderStatus = serde_json::from_value(status.clone()).map_err(|err| {
+                            let obj = val.as_object().ok_or("order update was not an object")?;
+
+                            let status_val = match obj.get("status") {
+                                Some(status_val) => status_val,
+                                None => {
+                                    log::trace!("Order update without status, this is likely a partial-fill message");
+                                    continue;
+                                }
+                            };
+
+                            let status: OrderStatus = serde_json::from_value(status_val.clone()).map_err(|err| {
                                 log::error!("Could not parse order status: {}", err);
                                 "OrderStatus deserialization error"
                             })?;
@@ -636,11 +635,11 @@ impl KrakenWsClient {
                     }
                 }
             }
-            return Ok(());
+            Ok(())
         } else if self.subscription_tracker.is_book_channel(channel_name) {
             // This looks like a book message. The last item should be the asset pair
             let pair = array
-                .get(array.len() - 1)
+                .last()
                 .ok_or("index invalid")?
                 .as_str()
                 .ok_or("book message did not have asset pair string as last item")?;
@@ -681,7 +680,6 @@ impl KrakenWsClient {
             } else if first_obj.contains_key("a") || first_obj.contains_key("b") {
                 // Looks like an incremental update
                 // lets scan across the objects in the array, skipping first and last two
-                drop(first_obj);
                 let len = array.len();
                 for val in &array[1..len - 2] {
                     let obj = val.as_object().ok_or("expected an update object")?;
@@ -709,9 +707,9 @@ impl KrakenWsClient {
             } else {
                 return Err("update had no usable data");
             }
-            return Ok(());
+            Ok(())
         } else {
-            return Err("unexpected channel name");
+            Err("unexpected channel name")
         }
     }
 

@@ -304,6 +304,7 @@ pub struct AddOrderRequest {
     pub oflags: BTreeSet<OrderFlag>,
     /// validate: If true, do not submit order
     #[serde(skip_serializing_if = "core::ops::Not::not")]
+    #[serde(with = "serde_with::rust::display_fromstr")]
     pub validate: bool,
 }
 

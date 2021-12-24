@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "krakenrs"
-version = "5.2.1"
+version = "5.2.2"
 dependencies = [
  "base64",
  "chrono",

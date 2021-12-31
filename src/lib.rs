@@ -1,6 +1,6 @@
 //! A rust crate for making requests to the Kraken Rest API and subscribing
 //! to Kraken websockets feeds
-
+#![feature(btree_retain)]
 #![deny(missing_docs)]
 
 mod kraken_rest_client;

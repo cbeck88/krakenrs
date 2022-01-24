@@ -146,7 +146,7 @@ The `krak-feed` binary target can subscribe to, and print the results of, websoc
 
 Usage
 - Build everything: `cargo build`.
-- Run `./target/debug krak-feed --help` for usage information.
+- Run `./target/debug/krak-feed --help` for usage information.
   For example, `./krak-feed book XBT/USD` will display the bitcoin/USD order book continuously.
 
 Other projects of interest

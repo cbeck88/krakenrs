@@ -74,26 +74,30 @@ pub struct WsAPIResults {
 
 /// A Kraken websockets api client
 pub struct KrakenWsClient {
-    // config we were created with
+    /// config we were created with
     config: KrakenWsConfig,
-    // websocket sink
+    /// websocket sink
     sink: SinkType,
-    // output
+    /// output
     output: Arc<WsAPIResults>,
-    // Track subscription statuses of different channels
+    /// Track subscription statuses of different channels
     subscription_tracker: SubscriptionTracker,
-    // Tracks sequence number of the openOrders subscription
-    // This is Some if we are subscribed, and contains the current sequence number
-    // It is None if we are unsubscribed or there was an error
+    /// Tracks sequence number of the openOrders subscription
+    /// This is Some if we are subscribed, and contains the current sequence number
+    /// It is None if we are unsubscribed or there was an error
     open_orders_sequence_number: Option<u64>,
-    // Result senders for add_order calls
+    /// Result senders for add_order calls
     add_order_result_senders: HashMap<u64, oneshot::Sender<Result<String, String>>>,
-    // Result senders for cancel_order calls
+    /// Result senders for cancel_order calls
     cancel_order_result_senders: HashMap<u64, oneshot::Sender<Result<(), String>>>,
-    // Result senders for cancel_all_orders calls
+    /// Result senders for cancel_all_orders calls
     cancel_all_orders_result_senders: HashMap<u64, oneshot::Sender<Result<u64, String>>>,
-    // Client req id ensures unique ids for different requests we make to kraken
+    /// Client req id ensures unique ids for different requests we make to kraken
     client_req_id: AtomicU64,
+    /// The last time if any that we got a message from Kraken, including heartbeats
+    last_msg_received: Option<Instant>,
+    /// The last time, and req-id, for a ping that we sent to Kraken
+    last_outstanding_ping: Option<(Instant, u64)>,
 }
 
 impl KrakenWsClient {
@@ -139,6 +143,8 @@ impl KrakenWsClient {
             cancel_order_result_senders: Default::default(),
             cancel_all_orders_result_senders: Default::default(),
             client_req_id: Default::default(),
+            last_msg_received: None,
+            last_outstanding_ping: None,
         };
 
         for pair in config.subscribe_book.iter() {
@@ -168,6 +174,7 @@ impl KrakenWsClient {
     /// Errors should be considered fatal, and will result in stream_closed being set
     /// for the consumer.
     pub fn update(&mut self, stream_result: Result<Message, Error>) -> Result<(), Error> {
+        self.last_msg_received = Some(Instant::now());
         match stream_result {
             Ok(Message::Text(text)) => {
                 self.handle_kraken_text(text);
@@ -367,6 +374,33 @@ impl KrakenWsClient {
         Ok(())
     }
 
+    /// Send a ping to the kraken server. This is an application-level ping
+    /// and not a websockets ping.
+    pub async fn ping(&mut self) -> Result<(), Error> {
+        let req_id = self.client_req_id.fetch_add(1, Ordering::SeqCst);
+
+        let payload = json!({
+            "event": "ping",
+            "reqid": req_id,
+        });
+
+        self.sink.send(Message::Text(payload.to_string())).await?;
+
+        self.last_outstanding_ping = Some((Instant::now(), req_id));
+        Ok(())
+    }
+
+    /// Get the time of the last ping that was sent.
+    /// Returns none if that ping was answered with pong by kraken.
+    pub fn get_last_outstanding_ping_time(&self) -> Option<Instant> {
+        self.last_outstanding_ping.map(|x| x.0.clone())
+    }
+
+    /// Get the time of the last message we received from Kraken (if any).
+    pub fn get_last_message_time(&self) -> Option<Instant> {
+        self.last_msg_received.clone()
+    }
+
     /// Close the socket gracefully
     pub async fn close(&mut self) -> Result<(), Error> {
         self.output.stream_closed.store(true, Ordering::SeqCst);
@@ -459,7 +493,11 @@ impl KrakenWsClient {
                         if let Err(err) = self.handle_cancel_all_orders_status(map) {
                             log::error!("handling cancel all order status: {}\n{}", err, text)
                         }
-                    } else if event == "pong" || event == "heartbeat" {
+                    } else if event == "pong" {
+                        if let Err(err) = self.handle_pong(map) {
+                            log::error!("handling pong: {}\n{}", err, text)
+                        }
+                    } else if event == "heartbeat" {
                         // nothing to do
                     } else {
                         log::error!("Unknown event from kraken: {}\n{}", event, text);
@@ -480,6 +518,27 @@ impl KrakenWsClient {
                 log::error!("Could not deserialize json from Kraken: {}\n{}", err, text);
             }
         }
+    }
+
+    fn handle_pong(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {
+        if let Some(req_id_val) = map.get("reqid") {
+            if let Some(req_id_num) = req_id_val.as_u64() {
+                if let Some(last_ping) = self.last_outstanding_ping {
+                    if last_ping.1 != req_id_num {
+                        return Err("Received pong with unexpected reqid");
+                    }
+                } else {
+                    return Err("Received pong without outstanding ping");
+                }
+            } else {
+                return Err("Received pong with reqid that was not a number");
+            }
+        } else {
+            return Err("Received a pong without reqid, not expected");
+        }
+        // If we got here, then the pong had the expected req id, so our ping was answered
+        self.last_outstanding_ping = None;
+        Ok(())
     }
 
     fn handle_subscription_status(&mut self, map: serde_json::Map<String, Value>) -> Result<(), &'static str> {

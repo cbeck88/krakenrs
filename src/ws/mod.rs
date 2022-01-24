@@ -11,10 +11,12 @@ use std::sync::{atomic::Ordering, Arc};
 use std::{
     collections::{BTreeMap, HashMap},
     thread,
+    time::{Duration, Instant},
 };
 use tokio::{
     runtime,
     sync::{mpsc, oneshot},
+    time,
 };
 
 mod conn;
@@ -56,6 +58,8 @@ impl KrakenWsAPI {
         let worker_thread = Some(thread::Builder::new().name("kraken-ws-internal-runtime".into()).spawn(
             move || {
                 rt.block_on(async move {
+                    // Every second, confirm that we got a heart beat, or send a ping / expect a pong
+                    let mut interval = time::interval(Duration::from_secs(1));
                     loop {
                         tokio::select! {
                             stream_result = stream.next() => {
@@ -107,6 +111,30 @@ impl KrakenWsAPI {
                                             log::error!("error canceling all orders, closing stream: {}", err);
                                             drop(client.close().await);
                                             return;
+                                        }
+                                    }
+                                }
+                            }
+                            _ = interval.tick() => {
+                                if let Some(time) = client.get_last_message_time() {
+                                    // If we haven't heard anything in a while that's bad
+                                    // Kraken says they send a heartbeat about every second
+                                    let now = Instant::now();
+                                    if time + Duration::from_secs(2) < now {
+                                        // Check if we earlier sent a ping
+                                        if let Some(ping_time) = client.get_last_outstanding_ping_time() {
+                                            if ping_time + Duration::from_secs(1) < now {
+                                                log::error!("Kraken did not respond to ping, closing stream");
+                                                drop(client.close().await);
+                                                return;
+                                            }
+                                        } else {
+                                            // There is no outstanding ping, let's send a ping
+                                            if let Err(err) = client.ping().await {
+                                                log::error!("error sending ping, closing stream: {}", err);
+                                                drop(client.close().await);
+                                                return;
+                                            }
                                         }
                                     }
                                 }

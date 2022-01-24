@@ -116,7 +116,7 @@ impl KrakenWsAPI {
                                 }
                             }
                             _ = interval.tick() => {
-                                 if let Some(time) = client.get_last_message_time() {
+                                if let Some(time) = client.get_last_message_time() {
                                     // If we haven't heard anything in a while that's bad
                                     // Kraken says they send a heartbeat about every second
                                     let now = Instant::now();
@@ -137,7 +137,7 @@ impl KrakenWsAPI {
                                             }
                                         }
                                     }
-                                 }
+                                }
                             }
                         }
                     }

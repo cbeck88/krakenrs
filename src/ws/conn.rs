@@ -174,7 +174,9 @@ impl KrakenWsClient {
     /// Errors should be considered fatal, and will result in stream_closed being set
     /// for the consumer.
     pub fn update(&mut self, stream_result: Result<Message, Error>) -> Result<(), Error> {
-        self.last_msg_received = Some(Instant::now());
+        if stream_result.is_ok() {
+            self.last_msg_received = Some(Instant::now());
+        }
         match stream_result {
             Ok(Message::Text(text)) => {
                 self.handle_kraken_text(text);
@@ -376,6 +378,9 @@ impl KrakenWsClient {
 
     /// Send a ping to the kraken server. This is an application-level ping
     /// and not a websockets ping.
+    ///
+    /// Note: It is a logic error to call this while
+    /// `get_last_outstanding_ping_time` returns Some.
     pub async fn ping(&mut self) -> Result<(), Error> {
         let req_id = self.client_req_id.fetch_add(1, Ordering::SeqCst);
 
@@ -390,7 +395,7 @@ impl KrakenWsClient {
         Ok(())
     }
 
-    /// Get the time of the last ping that was sent.
+    /// Get the time of the last ping that was sent (if any).
     /// Returns none if that ping was answered with pong by kraken.
     pub fn get_last_outstanding_ping_time(&self) -> Option<Instant> {
         self.last_outstanding_ping.map(|x| x.0.clone())

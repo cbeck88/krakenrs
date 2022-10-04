@@ -48,7 +48,7 @@ Examples
 
 REST API:
 
-```
+```rs
     use krakenrs::{KrakenRestConfig, KrakenRestAPI};
     use serde_json::to_string_pretty;
 
@@ -72,7 +72,7 @@ REST API:
 
 Websockets API:
 
-```
+```rs
 use krakenrs::ws::{KrakenWsConfig, KrakenWsAPI};
 use std::{
     time::Duration,

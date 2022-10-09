@@ -9,13 +9,13 @@ pub use kraken_rest_client::*;
 mod messages;
 use messages::{
     unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty,
-    GetOpenOrdersRequest, KrakenResult, TickerRequest,
+    GetOpenOrdersRequest, KrakenResult, OHLCRequest, TickerRequest,
 };
 pub use messages::{
-    AddOrderResponse, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse, BsType,
+    AddOrderResponse, AssetOHLCInfo, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse, BsType,
     CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, GetOpenOrdersResponse,
-    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse,
-    TickerResponse, TimeResponse, TxId, UserRefId,
+    GetWebSocketsTokenResponse, OHLCResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType,
+    SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -24,6 +24,8 @@ use std::collections::BTreeSet;
 // Websockets API support
 #[cfg(feature = "ws")]
 pub mod ws;
+
+mod tests;
 
 /// A description of a market order to place
 #[derive(Debug, Clone)]
@@ -97,6 +99,17 @@ impl KrakenRestAPI {
         let result: Result<KrakenResult<TickerResponse>> = self
             .client
             .query_public("Ticker", TickerRequest { pair: pairs.join(",") });
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Public) Get the ohlc data for one or more asset pairs
+    ///
+    /// Arguments:
+    /// * pairs: A list of Kraken asset pair strings to get ticker info about
+    /// * interval: An integer representing time frame interval in minutes (enum: 1 5 15 30 60 240 1440 10080 21600)
+    /// * since: An integer representing of the epoch (in ms) that you want to get data since
+    pub fn ohlc(&self, pairs: Vec<String>) -> Result<OHLCResponse> {
+        let result: Result<KrakenResult<OHLCResponse>> = self.client.query_public("OHLC", OHLCRequest { pair: pairs.join(","), interval: None, since: None });
         result.and_then(unpack_kraken_result)
     }
 

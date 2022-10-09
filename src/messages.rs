@@ -141,6 +141,35 @@ pub struct AssetTickerInfo {
 /// Type alias for response of Ticker API call
 pub type TickerResponse = HashMap<String, AssetTickerInfo>;
 
+/// A query object to kraken public "OHLC" API call
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct OHLCRequest {
+    /// A comma-separated list of kraken asset pair strings
+    pub pair: String,
+    /// An integer representing time frame interval in minutes (enum: 1 5 15 30 60 240 1440 10080 21600)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval: Option<i64>,
+    /// An integer representing of the epoch (in ms) that you want to get data since
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<i64>,
+}
+
+/// Result of kraken public "OHLC" API call
+// It's result object includes arrays containing differing types, and is somewhat complex.
+// See: <https://docs.kraken.com/rest/#operation/getOHLCData>
+// Array of tick data arrays [int <time>, string <open>, string <high>, string <low>, string <close>, string <vwap>, string <volume>, int <count>]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetOHLCInfo {
+    /// last is an ID to be used as since when polling for new, committed OHLC data
+    pub last: i64,
+    /// Array of tick data arrays [int <time>, string <open>, string <high>, string <low>, string <close>, string <vwap>, string <volume>, int <count>]
+    #[serde(alias = "*", alias="XXBTZUSD", default)]
+    pub pair: Vec<(i64, String, String, String, String, String, String, i64)>,
+}
+
+/// Type alias for response of OHLC API call
+pub type OHLCResponse = AssetOHLCInfo;
+
 /// Type alias for response of Balance API call
 pub type BalanceResponse = HashMap<String, Decimal>;
 

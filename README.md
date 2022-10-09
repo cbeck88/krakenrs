@@ -48,7 +48,7 @@ Examples
 
 REST API:
 
-```
+```rs
     use krakenrs::{KrakenRestConfig, KrakenRestAPI};
     use serde_json::to_string_pretty;
 
@@ -72,37 +72,46 @@ REST API:
 
 Websockets API:
 
-```
-    use krakenrs::{KrakenWsConfig, KrakenWsAPI};
-    use std::{
-        collections::BTreeMap,
-        time::Duration,
-        thread,
+```rs
+use krakenrs::ws::{KrakenWsConfig, KrakenWsAPI};
+use std::{
+    time::Duration,
+    thread,
+};
+
+fn main() {
+    let pairs = vec!["USD/CAD".to_string()];
+
+    let ws_config = KrakenWsConfig {
+        subscribe_book: pairs.clone(),
+        book_depth: 10,
+        private: None
     };
+    let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
-    fn main() {
-        let pairs = vec!["XBT/USD".to_string(), "SOL/XBT".to_string()];
+    loop {
+        thread::sleep(Duration::from_millis(500));
+        let books = api.get_all_books();
 
-        let ws_config = KrakenWsConfig {
-            subscribe_book: pairs.clone(),
-            book_depth: 10,
-        };
-        let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
-
-        loop {
-            thread::sleep(Duration::from_millis(500));
-            let books = pairs
-                .iter()
-                .map(|pair| (pair.clone(), api.get_book(pair)))
-                .collect::<BTreeMap<_, _>>();
-
-            for (pair, book) in books {
-                println!("{}", pair);
-                println!("{:?}", book);
+        for (pair, book) in books {
+            println!("{}", pair);
+            println!("{} bids:", pair);
+            for (price, entry) in book.bid.iter() {
+                println!("{}\t\t{}", price, entry.volume);
             }
-            if api.stream_closed() { return; }
+            println!("{} asks:", pair);
+            for (price, entry) in book.ask.iter() {
+                println!("{}\t\t{}", price, entry.volume);
+            }
+            println!();
+            if book.checksum_failed {
+                println!("Checksum failed, aborting");
+                return;
+            }
         }
+        if api.stream_closed() { return; }
     }
+}
 ```
 
 The `KrakenWsAPI` object spawns a worker thread internally which drives the websockets connection.

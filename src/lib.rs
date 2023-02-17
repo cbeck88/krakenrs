@@ -36,6 +36,8 @@ pub struct MarketOrder {
     pub pair: String,
     /// Order flags (market price protection etc.)
     pub oflags: BTreeSet<OrderFlag>,
+    /// Leverage
+    pub leverage: Option<String>,
 }
 
 /// A description of a limit order to place
@@ -202,6 +204,7 @@ impl KrakenRestAPI {
             oflags: limit_order.oflags,
             userref: user_ref_id,
             validate,
+            leverage: limit_order.leverage,
         };
         let result: Result<KrakenResult<AddOrderResponse>> = self.client.query_private("AddOrder", req);
         result.and_then(unpack_kraken_result)

@@ -51,6 +51,8 @@ pub struct LimitOrder {
     pub price: String,
     /// Order flags (post-only etc.)
     pub oflags: BTreeSet<OrderFlag>,
+    /// Leverage
+    pub leverage: Option<String>,
 }
 
 /// A connection to the Kraken REST API
@@ -173,6 +175,7 @@ impl KrakenRestAPI {
             oflags: market_order.oflags,
             userref: user_ref_id,
             validate,
+            leverage: market_order.leverage,
         };
         let result: Result<KrakenResult<AddOrderResponse>> = self.client.query_private("AddOrder", req);
         result.and_then(unpack_kraken_result)

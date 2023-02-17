@@ -394,6 +394,8 @@ pub struct AddOrderRequest {
     /// validate: If true, do not submit order
     #[serde(skip_serializing_if = "core::ops::Not::not")]
     pub validate: bool,
+    /// leverage
+    pub leverage: Option<String>,
 }
 
 /// Add order response

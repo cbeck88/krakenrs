@@ -306,6 +306,7 @@ pub struct OrderDescriptionInfo {
     /// secondary price
     pub price2: Decimal,
     /// leverage
+    #[serde(deserialize_with = "serde_with::rust::default_on_error::deserialize")]
     pub leverage: Option<Decimal>,
     /// human-readable description
     pub order: String,

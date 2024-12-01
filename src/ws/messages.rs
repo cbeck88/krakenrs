@@ -188,6 +188,7 @@ pub struct OrderInfo {
 /// * post: Post-only (only for limit orders. Prevents immediately matching as a market order)
 /// * fcib: Prefer fee in base currency. Default when selling.
 /// * fciq: Prefer fee in quote currency. Default when buying.
+/// * viqc: Volume in quote currency.
 /// * nompp: Disable market order protection.
 #[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum OrderFlag {
@@ -197,6 +198,8 @@ pub enum OrderFlag {
     Fcib,
     /// fciq
     Fciq,
+    /// viqc
+    Viqc,
     /// nompp
     Nompp,
 }
@@ -208,6 +211,7 @@ impl FromStr for OrderFlag {
             "post" => Ok(OrderFlag::Post),
             "fcib" => Ok(OrderFlag::Fcib),
             "fciq" => Ok(OrderFlag::Fciq),
+            "viqc" => Ok(OrderFlag::Viqc),
             "nompp" => Ok(OrderFlag::Nompp),
             _ => Err("unknown OrderFlag"),
         }
@@ -220,6 +224,7 @@ impl From<crate::OrderFlag> for OrderFlag {
             crate::OrderFlag::Post => Self::Post,
             crate::OrderFlag::Fcib => Self::Fcib,
             crate::OrderFlag::Fciq => Self::Fciq,
+            crate::OrderFlag::Viqc => Self::Viqc,
             crate::OrderFlag::Nompp => Self::Nompp,
         }
     }

@@ -247,6 +247,8 @@ pub enum OrderFlag {
     Fcib,
     /// fciq
     Fciq,
+    /// viqc
+    Viqc,
     /// nompp
     Nompp,
 }
@@ -258,6 +260,7 @@ impl FromStr for OrderFlag {
             "post" => Ok(OrderFlag::Post),
             "fcib" => Ok(OrderFlag::Fcib),
             "fciq" => Ok(OrderFlag::Fciq),
+            "viqc" => Ok(OrderFlag::Viqc),
             "nompp" => Ok(OrderFlag::Nompp),
             _ => Err("unknown OrderFlag"),
         }

@@ -212,7 +212,7 @@ impl KrakenWsClient {
         }
 
         {
-            let mut sub = self.subscription_tracker.get_open_orders();
+            let sub = self.subscription_tracker.get_open_orders();
             if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
                 if let Err(err) = self.unsubscribe_open_orders().await {
@@ -224,7 +224,7 @@ impl KrakenWsClient {
         // Now look for things we are not subscribed to that we should be.
         // Check all the requested subscriptions
         for asset_pair in self.config.subscribe_book.clone() {
-            let mut sub = self.subscription_tracker.get_book(asset_pair.to_string());
+            let sub = self.subscription_tracker.get_book(asset_pair.to_string());
             if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
                 log::info!("Resubscribing to book '{}'", asset_pair);
                 sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
@@ -236,7 +236,7 @@ impl KrakenWsClient {
 
         if let Some(private_config) = self.config.private.as_ref() {
             if private_config.subscribe_open_orders {
-                let mut sub = self.subscription_tracker.get_open_orders();
+                let sub = self.subscription_tracker.get_open_orders();
                 if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
                     log::info!("Resubscribing to openOrders");
                     sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
@@ -281,9 +281,8 @@ impl KrakenWsClient {
             Ok(text) => {
                 // We have to store the result_sender before awaiting
                 self.add_order_result_senders.insert(client_req_id, result_sender);
-                self.sink.send(Message::Text(text)).await.map_err(|err| {
+                self.sink.send(Message::Text(text)).await.inspect_err(|err| {
                     self.add_order_result_senders.remove(&client_req_id);
-                    err
                 })?;
             }
         }
@@ -326,9 +325,8 @@ impl KrakenWsClient {
         self.sink
             .send(Message::Text(payload.to_string()))
             .await
-            .map_err(|err| {
+            .inspect_err(|err| {
                 self.cancel_order_result_senders.remove(&client_req_id);
-                err
             })?;
 
         Ok(())
@@ -368,9 +366,8 @@ impl KrakenWsClient {
         self.sink
             .send(Message::Text(payload.to_string()))
             .await
-            .map_err(|err| {
+            .inspect_err(|err| {
                 self.cancel_all_orders_result_senders.remove(&client_req_id);
-                err
             })?;
 
         Ok(())
@@ -398,12 +395,12 @@ impl KrakenWsClient {
     /// Get the time of the last ping that was sent (if any).
     /// Returns none if that ping was answered with pong by kraken.
     pub fn get_last_outstanding_ping_time(&self) -> Option<Instant> {
-        self.last_outstanding_ping.map(|x| x.0.clone())
+        self.last_outstanding_ping.map(|x| x.0)
     }
 
     /// Get the time of the last message we received from Kraken (if any).
     pub fn get_last_message_time(&self) -> Option<Instant> {
-        self.last_msg_received.clone()
+        self.last_msg_received
     }
 
     /// Close the socket gracefully
@@ -656,7 +653,7 @@ impl KrakenWsClient {
             // Apply the updates
             let mut open_orders = self.output.open_orders.lock().expect("mutex poisoned");
             let updates = array
-                .get(0)
+                .first()
                 .ok_or("index invalid")?
                 .as_array()
                 .ok_or("updates were not an array")?;

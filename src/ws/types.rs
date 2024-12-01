@@ -117,7 +117,7 @@ impl BookEntry {
         let first_nonzero = remove_decimal
             .chars()
             .position(|x| x != '0')
-            .unwrap_or_else(|| remove_decimal.len());
+            .unwrap_or(remove_decimal.len());
         remove_decimal[first_nonzero..].to_string()
     }
 }

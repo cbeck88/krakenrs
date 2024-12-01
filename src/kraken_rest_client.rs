@@ -183,7 +183,7 @@ impl KrakenRestClient {
         mac.update(&sha2_result);
         let mac = mac.finalize().into_bytes();
 
-        let sig = base64::encode(&mac);
+        let sig = base64::encode(mac);
         Ok((post_data, sig))
     }
 

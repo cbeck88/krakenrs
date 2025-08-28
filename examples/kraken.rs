@@ -12,9 +12,9 @@ use std::{
 };
 use structopt::StructOpt;
 
-/// Structure representing parsed command-line arguments to krak executable
+/// Structure representing parsed command-line arguments to "kraken" executable
 #[derive(StructOpt)]
-struct KrakConfig {
+struct KrakenConfig {
     #[structopt(subcommand)]
     command: Command,
 
@@ -27,7 +27,7 @@ struct KrakConfig {
     validate: bool,
 }
 
-/// Commands supported by krak executable
+/// Commands supported by kraken executable
 #[derive(StructOpt, Display)]
 enum Command {
     /// Get kraken system time
@@ -111,7 +111,7 @@ fn main() {
         })
         .init();
 
-    let config = KrakConfig::from_args();
+    let config = KrakenConfig::from_args();
 
     let mut kc_config = KrakenRestConfig::default();
 

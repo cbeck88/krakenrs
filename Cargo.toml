@@ -14,20 +14,18 @@ repository = "https://github.com/cbeck88/krakenrs"
 name = "krakenrs"
 path = "src/lib.rs"
 
-[[bin]]
-name = "krak"
-path = "src/bin/krak.rs"
+[[example]]
+name = "kraken"
+path = "examples/kraken.rs"
 
-[[bin]]
-name = "krak-feed"
-path = "src/bin/krak-feed.rs"
+[[example]]
+name = "kraken-feed"
+path = "examples/kraken-feed.rs"
 
 [dependencies]
 base64 = "0.20"
-chrono = "0.4"
-crc32fast = "1.3"
+crc32fast = { version = "1.3", optional = true }
 displaydoc = "0.2"
-env_logger = "0.9"
 futures = "0.3"
 hmac = "0.12"
 http = "1.3"
@@ -39,14 +37,19 @@ serde_qs = "0.15"
 serde_with = "1.6"
 sha2 = "0.10"
 rust_decimal = "1.17"
-structopt = "0.3"
-tokio = { version = "1.15", optional = true, features = ["full"] }
+tokio = { version = "1.15", optional = true, features = ["macros", "net", "rt"] }
 tokio-tungstenite = { version = "0.27", optional = true, default-features=false, features = ["connect", "handshake"] }
 url = "2.2"
 
+[dev-dependencies]
+chrono = "0.4"
+env_logger = "0.9"
+structopt = "0.3"
+tokio = { version = "1.15", features = ["time"] }
+
 [features]
 default = ["ws", "native-tls"]
-ws = ["tokio", "tokio-tungstenite"]
+ws = ["dep:tokio", "dep:tokio-tungstenite", "dep:crc32fast"]
 native-tls = ["reqwest/native-tls", "tokio-tungstenite?/native-tls"]
 rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite?/rustls"]
 

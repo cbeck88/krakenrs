@@ -6,6 +6,7 @@ use futures::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use http::Uri;
 use serde_json::{json, Value};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
@@ -18,7 +19,6 @@ use std::{
 };
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
-use url::Url;
 
 type WsClient = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type SinkType = SplitSink<WsClient, Message>;
@@ -116,10 +116,10 @@ impl KrakenWsClient {
     /// * Arc<WsApiResults>. This may be shared with synchronous code and polled for updates.
     ///   Note: KrakenWsAPI also conceals this detail.
     pub async fn new(config: KrakenWsConfig) -> Result<(Self, SplitStream<WsClient>, Arc<WsAPIResults>), Error> {
-        let url = if config.private.is_some() {
-            Url::parse("wss://ws-auth.kraken.com").unwrap()
+        let url: Uri = if config.private.is_some() {
+            "wss://ws-auth.kraken.com".parse().unwrap()
         } else {
-            Url::parse("wss://ws.kraken.com").unwrap()
+            "wss://ws.kraken.com".parse().unwrap()
         };
         let (socket, _request) = tokio_tungstenite::connect_async(url).await?;
         let (sink, stream) = socket.split();
@@ -179,7 +179,7 @@ impl KrakenWsClient {
         }
         match stream_result {
             Ok(Message::Text(text)) => {
-                self.handle_kraken_text(text);
+                self.handle_kraken_text(text.as_str());
             }
             Ok(Message::Binary(_)) => {
                 log::warn!("Unexpected binary message from Kraken");
@@ -187,6 +187,9 @@ impl KrakenWsClient {
             Ok(Message::Ping(_)) => {}
             Ok(Message::Pong(_)) => {}
             Ok(Message::Close(_)) => return Err(Error::ConnectionClosed),
+            Ok(Message::Frame(_)) => {
+                log::error!("Per docs, this should be unreachable when reading");
+            }
             Err(err) => {
                 self.output.stream_closed.store(true, Ordering::SeqCst);
                 return Err(err);
@@ -281,7 +284,7 @@ impl KrakenWsClient {
             Ok(text) => {
                 // We have to store the result_sender before awaiting
                 self.add_order_result_senders.insert(client_req_id, result_sender);
-                self.sink.send(Message::Text(text)).await.inspect_err(|_err| {
+                self.sink.send(Message::Text(text.into())).await.inspect_err(|_err| {
                     self.add_order_result_senders.remove(&client_req_id);
                 })?;
             }
@@ -323,7 +326,7 @@ impl KrakenWsClient {
 
         // This drops the result_sender if sending fails
         self.sink
-            .send(Message::Text(payload.to_string()))
+            .send(Message::Text(payload.to_string().into()))
             .await
             .inspect_err(|_err| {
                 self.cancel_order_result_senders.remove(&client_req_id);
@@ -364,7 +367,7 @@ impl KrakenWsClient {
 
         // This drops the result_sender if sending fails
         self.sink
-            .send(Message::Text(payload.to_string()))
+            .send(Message::Text(payload.to_string().into()))
             .await
             .inspect_err(|_err| {
                 self.cancel_all_orders_result_senders.remove(&client_req_id);
@@ -386,7 +389,7 @@ impl KrakenWsClient {
             "reqid": req_id,
         });
 
-        self.sink.send(Message::Text(payload.to_string())).await?;
+        self.sink.send(Message::Text(payload.to_string().into())).await?;
 
         self.last_outstanding_ping = Some((Instant::now(), req_id));
         Ok(())
@@ -419,7 +422,7 @@ impl KrakenWsClient {
                 "depth": self.config.book_depth,
             },
         });
-        self.sink.send(Message::Text(payload.to_string())).await
+        self.sink.send(Message::Text(payload.to_string().into())).await
     }
 
     /// Unsubscribe from a book stream
@@ -434,7 +437,7 @@ impl KrakenWsClient {
                 "depth": book_depth,
             },
         });
-        sink.send(Message::Text(payload.to_string())).await
+        sink.send(Message::Text(payload.to_string().into())).await
     }
 
     /// Subscribe to the openOrders strream
@@ -451,7 +454,7 @@ impl KrakenWsClient {
                 "token": private_config.token.clone(),
             },
         });
-        self.sink.send(Message::Text(payload.to_string())).await
+        self.sink.send(Message::Text(payload.to_string().into())).await
     }
 
     /// Unsubscribe from the openOrders strream
@@ -468,11 +471,11 @@ impl KrakenWsClient {
                 "token": private_config.token.clone(),
             },
         });
-        self.sink.send(Message::Text(payload.to_string())).await
+        self.sink.send(Message::Text(payload.to_string().into())).await
     }
 
-    fn handle_kraken_text(&mut self, text: String) {
-        match Value::from_str(&text) {
+    fn handle_kraken_text(&mut self, text: &str) {
+        match Value::from_str(text) {
             Ok(Value::Object(map)) => {
                 if let Some(event) = map.get("event") {
                     if event == "subscriptionStatus" {

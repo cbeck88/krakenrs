@@ -12,7 +12,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     convert::TryFrom,
-    io::{Error as IoError, ErrorKind},
+    io::Error as IoError,
     path::Path,
     str::FromStr,
     time::{Duration, SystemTime},

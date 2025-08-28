@@ -3,7 +3,7 @@
 //! https://github.com/veox/python3-krakenex/blob/master/krakenex/api.py
 
 use displaydoc::Display;
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use reqwest::{
     blocking::Response,
     header::{HeaderMap, HeaderValue, InvalidHeaderValue},
@@ -178,7 +178,7 @@ impl KrakenRestClient {
         let hmac_sha_key = base64::decode(&self.config.creds.secret).map_err(Error::SigningB64)?;
 
         type HmacSha = Hmac<Sha512>;
-        let mut mac = HmacSha::new_varkey(&hmac_sha_key).expect("Hmac should work with any key length");
+        let mut mac = HmacSha::new_from_slice(&hmac_sha_key).expect("Hmac should work with any key length");
         mac.update(url_path.as_bytes());
         mac.update(&sha2_result);
         let mac = mac.finalize().into_bytes();

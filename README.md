@@ -32,8 +32,8 @@ Unlike some other bindings, these are not async APIs (although the websockets fe
 We have chosen to create blocking APIs for the Kraken REST API version for a few reasons:
 * simplicity
 * ease of debugging
-* when trying to make multiple private REST API calls in parallel, we often see invalid nonce errors
-  this is because the nonces are based on timestamps, but when multiple requests are created and sent
+* when trying to make multiple private REST API calls in parallel, we often see invalid nonce errors.
+  This is because the nonces are based on timestamps, but when multiple requests are created and sent
   in parallel, this is inherently racy and sometimes the request with the higher nonce will be processed
   by kraken first, invalidating the others.
 
@@ -42,6 +42,9 @@ in parallel isn't really possible.
 
 Instead, it seems better to lean on the Websockets API, which is easy to use whether you want to use
 an async runtime or not, and not make lots of calls to the REST API.
+
+If you are using an async runtime like tokio, you can avoid blocking the executor by wrapping sequences of calls to
+the REST API with `task::block_in_place` or similar.
 
 Examples
 --------
@@ -126,16 +129,15 @@ Use at your own risk. If you build trading software using this component and you
 Rest API Demo
 -------------
 
-The `krak` binary target is a simple demo that can be used to exercise the rest API functionality.
+The `kraken` binary target is a simple demo that can be used to exercise the rest API functionality.
 It is a command-line target that can parse a credentials file, connect to kraken and make a single
 API call, and print the response.
 
 Usage:
-- Build everything: `cargo build`.
-- Run `./target/debug/krak --help` for usage information.
+- Run `cargo run --example kraken -- --help` for usage information.
   For example, you can see the trading system's current status with
-  `./krak system-status`, or see asset pairs and current prices with
-  `./krak asset-pairs`, `./krak ticker AAVEUSD`
+  `./kraken system-status`, or see asset pairs and current prices with
+  `./kraken asset-pairs`, `./kraken ticker AAVEUSD`
 - If you want to use private APIs, go to your Kraken account and create an API key.
   Then create a json file with your credentials, with the following schema:
   ```
@@ -145,18 +147,17 @@ Usage:
   }
   ```
 - Private APIs are invoked for example like:
-  `./krak path/to/creds get-open-orders`
-  `./krak path/to/creds --validate market-buy 0.02 AAVEUSD`
+  `cargo run --example kraken path/to/creds get-open-orders`
+  `cargo run --example kraken path/to/creds --validate market-buy 0.02 AAVEUSD`
 
 Websockets Feed Demo
 --------------------
 
-The `krak-feed` binary target can subscribe to, and print the results of, websockets feeds.
+The `kraken-feed` example target can subscribe to, and print the results of, websockets feeds.
 
 Usage
-- Build everything: `cargo build`.
-- Run `./target/debug/krak-feed --help` for usage information.
-  For example, `./krak-feed book XBT/USD` will display the bitcoin/USD order book continuously.
+- Run `cargo run --example kraken-feed --help` for usage information.
+  For example, `./kraken-feed book XBT/USD` will display the bitcoin/USD order book continuously.
 
 Other projects of interest
 --------------------------

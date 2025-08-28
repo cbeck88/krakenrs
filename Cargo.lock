@@ -980,7 +980,7 @@ dependencies = [
 
 [[package]]
 name = "krakenrs"
-version = "5.3.1"
+version = "5.3.2"
 dependencies = [
  "base64 0.13.1",
  "chrono",

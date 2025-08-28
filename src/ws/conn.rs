@@ -281,7 +281,7 @@ impl KrakenWsClient {
             Ok(text) => {
                 // We have to store the result_sender before awaiting
                 self.add_order_result_senders.insert(client_req_id, result_sender);
-                self.sink.send(Message::Text(text)).await.inspect_err(|err| {
+                self.sink.send(Message::Text(text)).await.inspect_err(|_err| {
                     self.add_order_result_senders.remove(&client_req_id);
                 })?;
             }
@@ -325,7 +325,7 @@ impl KrakenWsClient {
         self.sink
             .send(Message::Text(payload.to_string()))
             .await
-            .inspect_err(|err| {
+            .inspect_err(|_err| {
                 self.cancel_order_result_senders.remove(&client_req_id);
             })?;
 
@@ -366,7 +366,7 @@ impl KrakenWsClient {
         self.sink
             .send(Message::Text(payload.to_string()))
             .await
-            .inspect_err(|err| {
+            .inspect_err(|_err| {
                 self.cancel_all_orders_result_senders.remove(&client_req_id);
             })?;
 

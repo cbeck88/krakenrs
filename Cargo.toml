@@ -46,3 +46,6 @@ url = "2.2"
 [features]
 default = ["ws"]
 ws = ["tokio", "tokio-tungstenite"]
+
+[lints.clippy]
+result_large_err = "allow"

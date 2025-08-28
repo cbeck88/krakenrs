@@ -54,10 +54,10 @@ impl KrakenCredentials {
         let creds_file = std::fs::read_to_string(path)?;
         let creds_data: KrakenCredentials = serde_json::from_str(&creds_file)?;
         if creds_data.key.is_empty() {
-            return Err(IoError::new(ErrorKind::Other, "Missing credentials 'key' value"));
+            return Err(IoError::other("Missing credentials 'key' value"));
         }
         if creds_data.secret.is_empty() {
-            return Err(IoError::new(ErrorKind::Other, "Missing credentials 'secret' value"));
+            return Err(IoError::other("Missing credentials 'secret' value"));
         }
         Ok(creds_data)
     }

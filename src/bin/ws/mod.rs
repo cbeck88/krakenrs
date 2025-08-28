@@ -286,7 +286,7 @@ pub fn main() {
                 Err(err) => log::error!("Failed: {}", err),
             }
         }
-        Command::CancelAllOrders {} => {
+        Command::CancelAllOrders => {
             let api = get_private_websockets_api(&config.creds);
 
             let result = api.cancel_all_orders().expect("api call failed");

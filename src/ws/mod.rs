@@ -165,6 +165,14 @@ impl KrakenWsAPI {
             .collect()
     }
 
+    /// Get latest book data that we have subscribed to, for an individual book
+    pub fn get_book(&self, asset_pair: &str) -> Option<BookData> {
+        self.output
+            .book
+            .get(asset_pair)
+            .map(|lock| lock.lock().expect("mutex poisoned").clone())
+    }
+
     /// Get latest openOrder data
     pub fn get_open_orders(&self) -> HashMap<String, OrderInfo> {
         self.output.open_orders.lock().expect("mutex poisoned").clone()

@@ -72,7 +72,10 @@ pub struct WsAPIResults {
     pub stream_closed: AtomicBool,
 }
 
-/// A Kraken websockets api client
+/// A Kraken websockets api context.
+/// Owns the websockets stream output, and all context related to the protocol
+/// Does not drive the websocket on its own however, the caller needs to poll the
+/// stream and then call "update", as well as giving it any requests to send to kraken.
 pub struct KrakenWsClient {
     /// config we were created with
     config: KrakenWsConfig,

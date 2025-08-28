@@ -421,6 +421,31 @@ pub struct OrderAdded {
     pub close: String,
 }
 
+/// GetTradeVolume request
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetTradeVolumeRequest {
+    /// Comma-separated asset pairs to get fee info for
+    pub pair: String,
+}
+
+/// GetTradeVolume response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetTradeVolumeResponse {
+    /// Total 30-day volume this account is credited for
+    pub volume: Decimal,
+    /// Taker fees, per asset pair requested
+    pub fees: HashMap<String, FeeTierInfo>,
+    /// Maker fees, per asset pair requested
+    pub fees_maker: HashMap<String, FeeTierInfo>,
+}
+
+/// Substructure of GetTradeVolume response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FeeTierInfo {
+    /// Fee, expressed as a %
+    pub fee: Decimal,
+}
+
 /// WebSockets authenitcation token response, including token and expiry
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetWebSocketsTokenResponse {

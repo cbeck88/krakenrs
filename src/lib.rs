@@ -9,13 +9,13 @@ pub use kraken_rest_client::*;
 mod messages;
 use messages::{
     unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty,
-    GetOpenOrdersRequest, KrakenResult, TickerRequest,
+    GetOpenOrdersRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
-    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, GetOpenOrdersResponse,
-    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse,
-    TickerResponse, TimeResponse, TxId, UserRefId,
+    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, FeeTierInfo,
+    GetOpenOrdersResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
+    OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -103,6 +103,17 @@ impl KrakenRestAPI {
     /// (Private) Get the balance
     pub fn get_account_balance(&self) -> Result<BalanceResponse> {
         let result: Result<KrakenResult<BalanceResponse>> = self.client.query_private("Balance", Empty {});
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get trade volume and fee tier info, per asset pair
+    pub fn get_trade_volume(&self, asset_pairs: Vec<String>) -> Result<GetTradeVolumeResponse> {
+        let result: Result<KrakenResult<GetTradeVolumeResponse>> = self.client.query_private(
+            "GetTradeVolume",
+            GetTradeVolumeRequest {
+                pair: asset_pairs.join(","),
+            },
+        );
         result.and_then(unpack_kraken_result)
     }
 

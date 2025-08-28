@@ -78,7 +78,7 @@ else
 	exit 1
 fi
 
-CARGOFMT="cargo fmt -- --unstable-features --skip-children"
+CARGOFMT="cargo fmt -- --skip-children"
 
 # Just check that running rustfmt doesn't do anything to the file. I do this instead of
 # modifying the file because I don't want to mess with the developer's index, which may
@@ -86,7 +86,7 @@ CARGOFMT="cargo fmt -- --unstable-features --skip-children"
 printf "${PREFIX} Checking formatting ... "
 FMTRESULT=0
 diff=""
-for file in $(git diff --name-only --cached --diff-filter=d | grep -v '^public/thirdparty/.*' | grep -v '^thirdparty/.*'  | egrep -v '^public/sgx/sgx_(tcrypto|urts|types)');
+for file in $(git diff --name-only --cached --diff-filter=d);
 do
 	if [[ ${file: -3} == ".rs" ]]; then
 		newdiff=$($CARGOFMT --check $file | grep '^Diff in ' | awk -F' ' '{print $3;}')

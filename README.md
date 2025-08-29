@@ -24,6 +24,10 @@ Features
 To get the websockets API, the `"ws"` feature must be enabled. It is on by default.
 Otherwise you only get the REST API, which can do all the same things (and more), but has more strict rate limits.
 
+Note that we only support websockets v1 right now. In the future we might migrate to the v2 API, but it would be a major version bump.
+
+Note that as of version 6, `serde_json/arbitrary_precision` feature is required for the crate to work, because some parts of the websockets v1 API represent unix timestamps as json numbers. This may have some performance impact for other parts of your project, but in most cases it shouldn't be a big deal. If this is bad for you, stick to version 5, or you may help us move to v2 API support.
+
 Threading
 ---------
 
@@ -155,9 +159,10 @@ Websockets Feed Demo
 
 The `kraken-feed` example target can subscribe to, and print the results of, websockets feeds.
 
-Usage
+Usage:
 - Run `cargo run --example kraken-feed --help` for usage information.
-  For example, `./kraken-feed book XBT/USD` will display the bitcoin/USD order book continuously.
+- `cargo run --example kraken-feed book XBT/USD` will display the bitcoin/USD order book continuously.
+- `cargo run --example kraken-feed trades XBT/USD` will display the bitcoin/USD trade sequence continuously.
 
 Other projects of interest
 --------------------------

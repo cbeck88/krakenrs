@@ -1,3 +1,4 @@
+use super::messages::BsType;
 use displaydoc::Display;
 use rust_decimal::Decimal;
 use serde_json::Value;
@@ -122,7 +123,20 @@ impl BookEntry {
     }
 }
 
-/// Possible subscription types in Kraken WS api
+/// A record of a public trade
+#[derive(Default, Clone, Eq, PartialEq)]
+pub struct PublicTrade {
+    /// The price at which this trade took place
+    pub price: Decimal,
+    /// The volume of this trade
+    pub volume: Decimal,
+    /// The side (taker side) of this trade
+    pub side: BsType,
+    /// The timestamp of this of this trade (Decimal) (seconds since epoch)
+    pub timestamp: Decimal,
+}
+
+/// Possible subscription types in Kraken WS api (v1)
 /// Only supported types are listed here
 #[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SubscriptionType {
@@ -130,14 +144,17 @@ pub enum SubscriptionType {
     Book,
     /// openOrders
     OpenOrders,
+    /// trade
+    Trade,
 }
 
 impl FromStr for SubscriptionType {
     type Err = &'static str;
-    fn from_str(src: &str) -> core::result::Result<SubscriptionType, Self::Err> {
+    fn from_str(src: &str) -> Result<SubscriptionType, Self::Err> {
         match src {
             "book" => Ok(SubscriptionType::Book),
             "openOrders" => Ok(SubscriptionType::OpenOrders),
+            "trade" => Ok(SubscriptionType::Trade),
             _ => Err("unknown subscription type"),
         }
     }

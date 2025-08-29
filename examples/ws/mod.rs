@@ -36,6 +36,9 @@ enum Command {
     /// Get websockets feed for one or more asset-pair books
     Book { pairs: Vec<String> },
 
+    /// Get public trades feed for one asset-pair
+    Trades { pair: String },
+
     /// Get websockets feed for own open orders
     OpenOrders {},
 
@@ -130,8 +133,7 @@ pub fn main() {
         Command::Book { pairs } => {
             let ws_config = KrakenWsConfig {
                 subscribe_book: pairs,
-                book_depth: 10,
-                private: None,
+                ..Default::default()
             };
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
@@ -157,6 +159,30 @@ pub fn main() {
                         }
                     }
                     prev = next;
+                }
+
+                if api.stream_closed() {
+                    log::info!("Stream closed");
+                    return;
+                }
+            }
+        }
+        Command::Trades { pair } => {
+            let ws_config = KrakenWsConfig {
+                subscribe_trades: vec![pair.clone()],
+                ..Default::default()
+            };
+            let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
+
+            loop {
+                let next = api.get_trades(&pair).expect("asset pair should be known");
+
+                for t in next {
+                    let price = t.price;
+                    let volume = t.volume;
+                    let side = t.side;
+                    let timestamp = t.timestamp;
+                    println!("{side} {volume} {pair} @ {price} ({timestamp})");
                 }
 
                 if api.stream_closed() {

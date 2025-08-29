@@ -1,12 +1,13 @@
 use super::{
-    messages::{AddOrderRequest, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
-    types::{BookData, SubscriptionType},
+    messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
+    types::{BookData, PublicTrade, SubscriptionType},
 };
 use futures::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
 use http::Uri;
+use rust_decimal::Decimal;
 use serde_json::{json, Value};
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
@@ -36,6 +37,8 @@ pub struct KrakenWsConfig {
     pub subscribe_book: Vec<String>,
     /// Depth of order book subscriptions (how many ask/bid entries)
     pub book_depth: usize,
+    /// Public trade streams to subscribe to
+    pub subscribe_trades: Vec<String>,
     /// Optional configuration for private feeds
     pub private: Option<KrakenPrivateWsConfig>,
 }
@@ -45,6 +48,7 @@ impl Default for KrakenWsConfig {
         Self {
             subscribe_book: Default::default(),
             book_depth: 10,
+            subscribe_trades: Default::default(),
             private: None,
         }
     }
@@ -66,6 +70,8 @@ pub struct WsAPIResults {
     pub system_status: Mutex<Option<SystemStatus>>,
     /// Map Asset Pair -> Book data
     pub book: HashMap<String, Mutex<BookData>>,
+    /// Map Asset Pair -> Public trade data
+    pub trades: HashMap<String, Mutex<Vec<PublicTrade>>>,
     /// Map order id -> open orders
     pub open_orders: Mutex<HashMap<String, OrderInfo>>,
     /// Indicates that the stream is closed right now, and data may be stale.
@@ -130,9 +136,12 @@ impl KrakenWsClient {
         // Pre-populate API Results with book data we plan to subscribe to
         let mut api_results = WsAPIResults::default();
         for pair in config.subscribe_book.iter() {
+            api_results.book.insert(pair.to_owned(), Mutex::new(Default::default()));
+        }
+        for pair in config.subscribe_trades.iter() {
             api_results
-                .book
-                .insert(pair.to_string(), Mutex::new(Default::default()));
+                .trades
+                .insert(pair.to_owned(), Mutex::new(Default::default()));
         }
 
         let output = Arc::new(api_results);
@@ -151,9 +160,15 @@ impl KrakenWsClient {
         };
 
         for pair in config.subscribe_book.iter() {
-            result.subscription_tracker.get_book(pair.to_string()).last_request =
+            result.subscription_tracker.get_book(pair.to_owned()).last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
             result.subscribe_book(pair.to_string()).await?;
+        }
+
+        for pair in config.subscribe_trades.iter() {
+            result.subscription_tracker.get_trade(pair.to_owned()).last_request =
+                Some((SubscriptionStatus::Subscribed, Instant::now()));
+            result.subscribe_trade(pair.to_string()).await?;
         }
 
         if config.private.is_some() {
@@ -217,6 +232,15 @@ impl KrakenWsClient {
             }
         }
 
+        for (asset_pair, sub) in self.subscription_tracker.trade_subscriptions.iter_mut() {
+            if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
+                sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
+                if let Err(err) = Self::unsubscribe_trade(&mut self.sink, asset_pair.clone()).await {
+                    log::error!("Could not unsubscribe from trade {}: {}", asset_pair.clone(), err);
+                }
+            }
+        }
+
         {
             let sub = self.subscription_tracker.get_open_orders();
             if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
@@ -236,6 +260,17 @@ impl KrakenWsClient {
                 sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
                 if let Err(err) = self.subscribe_book(asset_pair.to_string()).await {
                     log::error!("Could not subscribe to book '{}': {}", asset_pair, err);
+                }
+            }
+        }
+
+        for asset_pair in self.config.subscribe_trades.clone() {
+            let sub = self.subscription_tracker.get_trade(asset_pair.to_string());
+            if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                log::info!("Resubscribing to trade '{}'", asset_pair);
+                sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                if let Err(err) = self.subscribe_trade(asset_pair.to_string()).await {
+                    log::error!("Could not subscribe to trade '{}': {}", asset_pair, err);
                 }
             }
         }
@@ -443,6 +478,32 @@ impl KrakenWsClient {
         sink.send(Message::Text(payload.to_string().into())).await
     }
 
+    /// Subscribe to a trade stream
+    async fn subscribe_trade(&mut self, pair: String) -> Result<(), Error> {
+        let payload = json!({
+            "event": "subscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "trade",
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string().into())).await
+    }
+
+    /// Unsubscribe from a trade stream
+    ///
+    /// Note: We made this not take self, to resolve a borrow checker issue
+    async fn unsubscribe_trade(sink: &mut SinkType, pair: String) -> Result<(), Error> {
+        let payload = json!({
+            "event": "unsubscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "trade",
+            },
+        });
+        sink.send(Message::Text(payload.to_string().into())).await
+    }
+
     /// Subscribe to the openOrders strream
     async fn subscribe_open_orders(&mut self) -> Result<(), Error> {
         let private_config = self
@@ -602,6 +663,22 @@ impl KrakenWsClient {
                             log::warn!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
+                    SubscriptionType::Trade => {
+                        // Trade subscriptions refer to a pair
+                        let pair = map
+                            .get("pair")
+                            .ok_or("Missing pair")?
+                            .as_str()
+                            .ok_or("pair was not a string")?;
+
+                        let sub = self.subscription_tracker.get_trade(pair.to_string());
+                        if sub.status != status {
+                            log::info!("{} @ {} trade: {}", status, pair, channel_name);
+                            *sub = SubscriptionState::new(status);
+                        } else {
+                            log::warn!("Unexpected repeated {} message: {:?}", status, map);
+                        }
+                    }
                     SubscriptionType::OpenOrders => {
                         let sub = self.subscription_tracker.get_open_orders();
                         if sub.status != status {
@@ -702,6 +779,66 @@ impl KrakenWsClient {
                     }
                 }
             }
+            Ok(())
+        } else if channel_name == "trade" {
+            // This looks like a trade message. The last item should be the asset pair
+            let pair = array
+                .last()
+                .ok_or("index invalid")?
+                .as_str()
+                .ok_or("trade message did not have asset pair string as last item")?;
+
+            // Check if this matches a trade subscription
+            let sub = self.subscription_tracker.get_trade(pair.to_string());
+            if !sub.status.is_subscribed() {
+                return Err("unexpected trade message, not subscribed");
+            }
+
+            // Lock the trade data to perform the update
+            let mut lk = self
+                .output
+                .trades
+                .get(pair)
+                .ok_or("unexpected asset pair update -- check asset pair name")?
+                .lock()
+                .expect("mutex poisoned");
+
+            let trades_array = array[1].as_array().ok_or("expected array of trades")?;
+
+            lk.reserve(trades_array.len());
+
+            for ent in trades_array.iter() {
+                let data = ent.as_array().ok_or("expected each trade to be an array")?;
+                let price_str = data[0].as_str().ok_or("expected price to be a string")?;
+                let volume_str = data[1].as_str().ok_or("volume was not a json string")?;
+                let timestamp_str = if let Some(num) = data[2].as_number() {
+                    num.as_str()
+                } else if let Some(s) = data[2].as_str() {
+                    s
+                } else {
+                    return Err("timestamp was not a json number or string");
+                };
+                let buy_sell_str = data[3].as_str().ok_or("buy-sell was expected to be a json string")?;
+
+                let side = match buy_sell_str {
+                    "b" => BsType::Buy,
+                    "s" => BsType::Sell,
+                    _ => {
+                        return Err("buy-sell str was not 'b' or 's'");
+                    }
+                };
+                let price = Decimal::from_str(price_str).map_err(|_| "could not parse price")?;
+                let volume = Decimal::from_str(volume_str).map_err(|_| "could not parse volume")?;
+                let timestamp = Decimal::from_str(timestamp_str).map_err(|_| "could not parse timestamp")?;
+
+                lk.push(PublicTrade {
+                    price,
+                    volume,
+                    timestamp,
+                    side,
+                });
+            }
+
             Ok(())
         } else if self.subscription_tracker.is_book_channel(channel_name) {
             // This looks like a book message. The last item should be the asset pair
@@ -919,10 +1056,12 @@ impl Drop for KrakenWsClient {
 /// change it.
 #[derive(Default, Clone, Debug)]
 struct SubscriptionTracker {
-    /// A map from asset-pairs to subscription states
+    /// A map from asset-pairs to book subscription states
     book_subscriptions: HashMap<String, SubscriptionState>,
     /// Known book channel names
     book_channels: HashSet<String>,
+    /// A map from asset-pairs to trade subscription states
+    trade_subscriptions: HashMap<String, SubscriptionState>,
     /// Subscription state of the openOrders channel
     open_orders: SubscriptionState,
 }
@@ -938,6 +1077,10 @@ impl SubscriptionTracker {
 
     pub fn get_book(&mut self, asset_pair: String) -> &mut SubscriptionState {
         self.book_subscriptions.entry(asset_pair).or_default()
+    }
+
+    pub fn get_trade(&mut self, asset_pair: String) -> &mut SubscriptionState {
+        self.trade_subscriptions.entry(asset_pair).or_default()
     }
 
     pub fn get_open_orders(&mut self) -> &mut SubscriptionState {

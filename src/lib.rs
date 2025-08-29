@@ -3,19 +3,22 @@
 
 #![deny(missing_docs)]
 
+mod last_and_data;
+pub use last_and_data::LastAndData;
+
 mod kraken_rest_client;
 pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
     unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty,
-    GetOpenOrdersRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
+    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
     BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, FeeTierInfo,
-    GetOpenOrdersResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
-    OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded,
+    OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -97,6 +100,20 @@ impl KrakenRestAPI {
         let result: Result<KrakenResult<TickerResponse>> = self
             .client
             .query_public("Ticker", TickerRequest { pair: pairs.join(",") });
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Public) Get 1000 most recent trades in an asset pair, optionally, since a particular timestamp.
+    /// The response contains a "last" number which can be used as "since" to get the next page if desired.
+    pub fn get_recent_trades(&self, pair: String, since: Option<String>) -> Result<GetRecentTradesResponse> {
+        let result: Result<KrakenResult<GetRecentTradesResponse>> = self.client.query_public(
+            "Trades",
+            GetRecentTradesRequest {
+                pair,
+                since,
+                count: None,
+            },
+        );
         result.and_then(unpack_kraken_result)
     }
 

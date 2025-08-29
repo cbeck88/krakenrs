@@ -36,7 +36,7 @@ serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 serde_qs = "0.15"
 serde_with = "1.6"
 sha2 = "0.10"
-rust_decimal = "1.17"
+rust_decimal = { version = "1.17", features = ["serde-with-arbitrary-precision"] }
 tokio = { version = "1.15", optional = true, features = ["macros", "net", "rt"] }
 tokio-tungstenite = { version = "0.27", optional = true, default-features=false, features = ["connect", "handshake"] }
 url = "2.2"

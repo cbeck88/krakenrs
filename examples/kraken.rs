@@ -40,6 +40,8 @@ enum Command {
     AssetPairs { pairs: Vec<String> },
     /// Get kraken's ticker info: {pairs:?}
     Ticker { pairs: Vec<String> },
+    /// Get recent trades since some timestamp: {pair}, {since:?}
+    RecentTrades { pair: String, since: Option<String> },
     /// Get account balance
     GetBalance,
     /// Get account trade volume (and fees): {pairs:?}
@@ -150,6 +152,10 @@ fn main() {
             let result = api.ticker(pairs).expect("api call failed");
             let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
             log_value(&sorted_result);
+        }
+        Command::RecentTrades { pair, since } => {
+            let result = api.get_recent_trades(pair, since).expect("api call failed");
+            log_value(&result);
         }
         Command::GetBalance => {
             let result = api.get_account_balance().expect("api call failed");

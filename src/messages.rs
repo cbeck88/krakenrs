@@ -1,7 +1,7 @@
 //! Structures representing json schema sent to and from Kraken REST API
 //! https://docs.kraken.com/rest/
 
-use crate::{Error, Result};
+use crate::{Error, LastAndData, Result};
 use displaydoc::Display;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,8 @@ use std::str::FromStr;
 /// The error part is an array of strings encoded as:
 /// <char-severity code><string-error category>:<string-error type>[:<string-extra info>]
 /// The result part is a json object or array
-#[derive(Debug, Serialize, Deserialize)]
-pub struct KrakenResult<ResultJson: Serialize> {
+#[derive(Debug, Deserialize)]
+pub struct KrakenResult<ResultJson> {
     /// Kraken API returns error strings in an array marked "error"
     pub error: Vec<String>,
     /// Kraken API returns results here, separated from error
@@ -23,7 +23,7 @@ pub struct KrakenResult<ResultJson: Serialize> {
 }
 
 /// Convert KrakenResult<T> to Result<T>
-pub fn unpack_kraken_result<ResultJson: Serialize>(src: KrakenResult<ResultJson>) -> Result<ResultJson> {
+pub fn unpack_kraken_result<ResultJson>(src: KrakenResult<ResultJson>) -> Result<ResultJson> {
     if !src.error.is_empty() {
         return Err(Error::KrakenErrors(src.error));
     }
@@ -35,14 +35,14 @@ pub fn unpack_kraken_result<ResultJson: Serialize>(src: KrakenResult<ResultJson>
 pub struct Empty {}
 
 /// Result of kraken public "Time" API call
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimeResponse {
     /// Unix time stamp (seconds since epoch)
     pub unixtime: u64,
 }
 
 /// Result of kraken public "SystemStatus" API call
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SystemStatusResponse {
     /// Status of kraken's trading system
     pub status: SystemStatus,
@@ -67,7 +67,7 @@ pub enum SystemStatus {
 }
 
 /// (Substructure within) Result of kraken public "Assets" API call
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetInfo {
     /// Alternative name for the asset
     pub altname: String,
@@ -91,7 +91,7 @@ pub struct AssetPairsRequest {
 }
 
 /// (Substructure within) Result of kraken public "Asset Pairs" API call
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetPair {
     /// Alternate pair name
     pub alt_name: Option<String>,
@@ -141,6 +141,43 @@ pub struct AssetTickerInfo {
 /// Type alias for response of Ticker API call
 pub type TickerResponse = HashMap<String, AssetTickerInfo>;
 
+/// A query object to kraken public "Get Recent Trades" API call
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct GetRecentTradesRequest {
+    /// A comma-separated list of kraken asset pair strings
+    pub pair: String,
+    /// Return trade data since given timestamp
+    pub since: Option<String>,
+    /// Return a specific number of trades, up to 1000.
+    /// Defaults to 1000.
+    pub count: Option<usize>,
+}
+
+/// Response object of Get Recent Trades API call
+/// (Note: See issue #3 for discussion of strategy)
+pub type GetRecentTradesResponse = LastAndData<Vec<PublicTrade>>;
+
+/// A sub-object of the recent-trades response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PublicTrade {
+    /// The price at which the trade took place
+    pub price: Decimal,
+    /// The volume of the trade
+    pub volume: Decimal,
+    /// The timestamp of the trade (seconds since the unix epoch)
+    #[serde(deserialize_with = "rust_decimal::serde::arbitrary_precision::deserialize")]
+    pub timestamp: Decimal,
+    /// Whether it was a buy or a sell
+    pub bs_type: BsType,
+    /// The order type of the trade (market or limit)
+    pub order_type: OrderType,
+    /// Misc (always empty at time of writing)
+    pub misc: String,
+    /// The trade id (an incrementing counter identifying trades)
+    /// Note that this isn't visible in the websockets v1 trade feed interface
+    pub trade_id: u64,
+}
+
 /// Type alias for response of Balance API call
 pub type BalanceResponse = HashMap<String, Decimal>;
 
@@ -156,8 +193,10 @@ pub type UserRefId = i32;
 #[serde(rename_all = "kebab-case")]
 pub enum BsType {
     /// Buy
+    #[serde(alias = "b")]
     Buy,
     /// Sell
+    #[serde(alias = "s")]
     Sell,
 }
 
@@ -167,8 +206,10 @@ pub enum BsType {
 #[serde(rename_all = "kebab-case")]
 pub enum OrderType {
     /// Market
+    #[serde(alias = "m")]
     Market,
     /// Limit
+    #[serde(alias = "l")]
     Limit,
     /// Stop-Loss
     StopLoss,
@@ -453,4 +494,52 @@ pub struct GetWebSocketsTokenResponse {
     pub token: String,
     /// Expiration time (in seconds)
     pub expires: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_public_trade() {
+        let text = r#"["314.11000","0.38203178",2,"b","l","",4151536]"#;
+
+        let obj: PublicTrade = serde_json::from_str(text).unwrap();
+
+        assert_eq!(obj.price, Decimal::new(31411, 2));
+        assert_eq!(obj.volume, Decimal::new(38203178, 8));
+        assert_eq!(obj.timestamp, Decimal::new(2, 0));
+        assert_eq!(obj.bs_type, BsType::Buy);
+        assert_eq!(obj.order_type, OrderType::Limit);
+        assert_eq!(obj.misc, "");
+        assert_eq!(obj.trade_id, 4151536);
+    }
+
+    #[test]
+    fn test_public_trade2() {
+        let text = r#"["314.11000","0.38203178",1756443751.1748989,"b","l","",4151536]"#;
+
+        let obj: PublicTrade = serde_json::from_str(text).unwrap();
+
+        assert_eq!(obj.price, Decimal::new(31411, 2));
+        assert_eq!(obj.volume, Decimal::new(38203178, 8));
+        assert_eq!(obj.timestamp.trunc(), Decimal::new(1756443751, 0));
+        assert_eq!(obj.timestamp.fract(), Decimal::new(1748989, 7));
+        assert_eq!(obj.bs_type, BsType::Buy);
+        assert_eq!(obj.order_type, OrderType::Limit);
+        assert_eq!(obj.misc, "");
+        assert_eq!(obj.trade_id, 4151536);
+    }
+
+    #[test]
+    fn test_get_recent_trades_response() {
+        // This text obtained as
+        // `curl "https://api.kraken.com/0/public/Trades?pair=AAVEUSD&count=3"`
+        let text = r#"{"AAVEUSD":[["314.11000","0.38203178",1756443751.1748989,"b","l","",4151536],["314.01000","0.26532000",1756443816.201052,"b","l","",4151537],["314.01000","0.24987835",1756443816.201052,"b","l","",4151538]],"last":"1756443816201051892"}"#;
+
+        let obj: GetRecentTradesResponse = serde_json::from_str(text).unwrap();
+
+        assert_eq!(obj.data.len(), 3);
+        assert_eq!(obj.last, "1756443816201051892");
+    }
 }

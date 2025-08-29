@@ -58,6 +58,10 @@ impl KrakenWsConfigBuilder {
     }
 
     /// Websockets names of asset pairs whose public trade feeds to subscribe to
+    ///
+    /// Note: Unlike book and open order info, the queue of received trades will grow unbounded
+    /// over time. You must periodically call `KrakenWsAPI::get_trades(...)` or similar to drain
+    /// this queue, or your program will face memory exhaustion eventually.
     pub fn subscribe_trades(mut self, subscribe_trades: Vec<String>) -> Self {
         self.config.subscribe_trades = subscribe_trades;
         self

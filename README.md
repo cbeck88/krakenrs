@@ -56,25 +56,31 @@ Examples
 REST API:
 
 ```rs
-    use krakenrs::{KrakenRestConfig, KrakenRestAPI};
-    use serde_json::to_string_pretty;
+use krakenrs::{KrakenRestAPI, KrakenRestConfig};
+use serde_json::to_string_pretty;
 
-    fn main() {
-        let kc_config = KrakenRestConfig::default();
-        let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
+fn main() {
+    let kc_config = KrakenRestConfig::default();
+    let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
 
-        println!(
-          to_string_pretty(
-            api.asset_pairs(vec!["XBT/USD", "SOL/BTC"]).expect("api call failed")
-          ).unwrap()
-        );
+    println!(
+        "{}",
+        to_string_pretty(
+            &api.asset_pairs(vec!["XBTUSD".to_string(), "SOLBTC".to_string()])
+                .expect("api call failed")
+        )
+        .unwrap()
+    );
 
-        println!(
-          to_string_pretty(
-            api.ticker(vec!["XBT/USD"]).expect("api call failed")
-          ).unwrap()
-        );
-    }
+    println!(
+        "{}",
+        to_string_pretty(
+            &api.ticker(vec!["XBTUSD".to_string()])
+                .expect("api call failed")
+        )
+        .unwrap()
+    );
+}
 ```
 
 Websockets API:

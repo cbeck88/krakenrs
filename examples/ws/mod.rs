@@ -17,7 +17,7 @@ use structopt::StructOpt;
 
 /// Structure representing parsed command-line arguments to krak-feed executable
 #[derive(StructOpt)]
-struct KrakFeedConfig {
+struct KrakenFeedConfig {
     #[structopt(subcommand)]
     command: Command,
 
@@ -127,7 +127,7 @@ pub fn main() {
         })
         .init();
 
-    let config = KrakFeedConfig::from_args();
+    let config = KrakenFeedConfig::from_args();
 
     match config.command {
         Command::Book { pairs } => {

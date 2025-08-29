@@ -24,9 +24,9 @@ Features
 To get the websockets API, the `"ws"` feature must be enabled. It is on by default.
 Otherwise you only get the REST API, which can do all the same things (and more), but has more strict rate limits.
 
-Note that we only support websockets v1 right now. In the future we might migrate to the v2 API, but it would be a major version bump.
+Note that we only support websockets v1 right now. In the future we might either migrate to (or simply add support for) the v2 API, but it would be a major version bump.
 
-Note that as of version 6, `serde_json/arbitrary_precision` feature is required for the crate to work, because some parts of the websockets v1 API represent unix timestamps as json numbers. This may have some performance impact for other parts of your project, but in most cases it shouldn't be a big deal. If this is bad for you, stick to version 5, or you may help us move to v2 API support.
+Note that as of version 6, `serde_json/arbitrary_precision` feature is required for the crate to work, because some parts of the websockets v1 API represent unix timestamps as json numbers. This may have some performance impact for other parts of your project, because the json parser will make more string allocations and save all numbers as String for longer. But in most cases it shouldn't be a big deal. If this is bad for you, stick to version 5, or you may help us move to v2 API support.
 
 Threading
 ---------
@@ -35,7 +35,7 @@ Unlike some other bindings, these are not async APIs (although the websockets fe
 
 We have chosen to create blocking APIs for the Kraken REST API version for a few reasons:
 * simplicity
-* ease of debugging
+* ease of debugging (backtraces don't lie)
 * when trying to make multiple private REST API calls in parallel, we often see invalid nonce errors.
   This is because the nonces are based on timestamps, but when multiple requests are created and sent
   in parallel, this is inherently racy and sometimes the request with the higher nonce will be processed
@@ -48,7 +48,7 @@ Instead, it seems better to lean on the Websockets API, which is easy to use whe
 an async runtime or not, and not make lots of calls to the REST API.
 
 If you are using an async runtime like tokio, you can avoid blocking the executor by wrapping sequences of calls to
-the REST API with `task::block_in_place` or similar.
+the REST API with `task::block_in_place` or similar, or just do all of it on a blocking thread.
 
 Examples
 --------
@@ -146,8 +146,9 @@ API call, and print the response.
 Usage:
 - Run `cargo run --example kraken -- --help` for usage information.
   For example, you can see the trading system's current status with
-  `./kraken system-status`, or see asset pairs and current prices with
-  `./kraken asset-pairs`, `./kraken ticker AAVEUSD`
+  `cargo run --example kraken -- system-status`, or see asset pairs and current prices with
+  `cargo run --example kraken -- asset-pairs`,
+  `cargo run --example kraken -- ticker AAVEUSD`
 - If you want to use private APIs, go to your Kraken account and create an API key.
   Then create a json file with your credentials, with the following schema:
   ```
@@ -169,6 +170,9 @@ Usage:
 - Run `cargo run --example kraken-feed --help` for usage information.
 - `cargo run --example kraken-feed book XBT/USD` will display the bitcoin/USD order book continuously.
 - `cargo run --example kraken-feed trades XBT/USD` will display the bitcoin/USD trade sequence continuously.
+
+Note that you have to use the "websockets name" of an asset pair when using the websockets APIs. This is the
+field `wsname` in the asset-pairs list.
 
 Other projects of interest
 --------------------------

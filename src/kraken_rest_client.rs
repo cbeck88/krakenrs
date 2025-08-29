@@ -8,7 +8,7 @@ use reqwest::{
     blocking::Response,
     header::{HeaderMap, HeaderValue, InvalidHeaderValue},
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256, Sha512};
 use std::{
     convert::TryFrom,

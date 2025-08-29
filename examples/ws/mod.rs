@@ -1,9 +1,9 @@
 use displaydoc::Display;
-use env_logger::{fmt::Color, Builder, Env};
+use env_logger::{Builder, Env, fmt::Color};
 use futures::executor::block_on;
 use krakenrs::{
-    ws::{KrakenWsAPI, KrakenWsConfig},
     BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
+    ws::{KrakenWsAPI, KrakenWsConfig},
 };
 use log::Level;
 use std::{

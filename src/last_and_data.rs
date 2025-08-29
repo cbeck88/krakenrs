@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use serde::{
-    de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer, Serialize,
+    de::{Error, MapAccess, Visitor},
 };
 
 /// The LastAndData struct is a helper to deal with wierdness in some of the

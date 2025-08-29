@@ -85,10 +85,10 @@ impl KrakenWsConfigBuilder {
 
     /// Build a valid KrakenWsConfig if possible
     pub fn build(self) -> Result<KrakenWsConfig, BuilderError> {
-        if let Some(private) = self.config.private.as_ref() {
-            if private.token.is_empty() {
-                return Err(BuilderError::MissingWsToken);
-            }
+        if let Some(private) = self.config.private.as_ref()
+            && private.token.is_empty()
+        {
+            return Err(BuilderError::MissingWsToken);
         }
         Ok(self.config)
     }

@@ -7,7 +7,7 @@
 
 use crate::{LimitOrder, MarketOrder};
 use futures::stream::StreamExt;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::Ordering};
 use std::{
     collections::{BTreeMap, HashMap},
     thread,

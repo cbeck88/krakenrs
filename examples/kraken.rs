@@ -1,7 +1,7 @@
 use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
-use env_logger::{fmt::Color, Builder, Env};
+use env_logger::{Builder, Env, fmt::Color};
 use krakenrs::{BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag};
 use log::Level;
 use serde::Serialize;

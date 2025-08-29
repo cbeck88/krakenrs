@@ -11,8 +11,8 @@ pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
-    unpack_kraken_result, AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty,
-    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
+    AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty, GetOpenOrdersRequest,
+    GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest, unpack_kraken_result,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,

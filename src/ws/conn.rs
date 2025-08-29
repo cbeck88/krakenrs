@@ -4,23 +4,23 @@ use super::{
     types::{BookData, PublicTrade, SubscriptionType},
 };
 use futures::{
-    stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
+    stream::{SplitSink, SplitStream},
 };
 use http::Uri;
 use rust_decimal::Decimal;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     str::FromStr,
     sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
 use tokio::{net::TcpStream, sync::oneshot};
-use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 
 type WsClient = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type SinkType = SplitSink<WsClient, Message>;
@@ -243,15 +243,15 @@ impl KrakenWsClient {
             }
         }
 
-        if let Some(private_config) = self.config.private.as_ref() {
-            if private_config.subscribe_open_orders {
-                let sub = self.subscription_tracker.get_open_orders();
-                if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
-                    log::info!("Resubscribing to openOrders");
-                    sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
-                    if let Err(err) = self.subscribe_open_orders().await {
-                        log::error!("Could not subscribe to openOrders: {}", err);
-                    }
+        if let Some(private_config) = self.config.private.as_ref()
+            && private_config.subscribe_open_orders
+        {
+            let sub = self.subscription_tracker.get_open_orders();
+            if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                log::info!("Resubscribing to openOrders");
+                sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                if let Err(err) = self.subscribe_open_orders().await {
+                    log::error!("Could not subscribe to openOrders: {}", err);
                 }
             }
         }
@@ -945,7 +945,10 @@ impl KrakenWsClient {
         let sender = if let Some(sender) = self.cancel_order_result_senders.remove(&req_id) {
             sender
         } else {
-            log::debug!("unknown cancel_order reqid ({})\nThis is not always a problem, if a cancel order is placed for multiple orders we only return the first result", req_id);
+            log::debug!(
+                "unknown cancel_order reqid ({})\nThis is not always a problem, if a cancel order is placed for multiple orders we only return the first result",
+                req_id
+            );
             return Ok(());
         };
 

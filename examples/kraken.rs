@@ -115,13 +115,15 @@ fn main() {
 
     let config = KrakenConfig::from_args();
 
-    let mut kc_config = KrakenRestConfig::default();
+    let mut builder = KrakenRestConfig::builder();
 
     // Load credentials from disk if specified
     if let Some(creds) = config.creds {
         log::info!("Credentials path: {:?}", creds);
-        kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
+        builder = builder.creds(KrakenCredentials::load_json_file(creds).expect("credential file error"));
     }
+
+    let kc_config = builder.build().expect("error building config");
 
     let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
 

@@ -1,4 +1,5 @@
 use super::{
+    config::KrakenWsConfig,
     messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
     types::{BookData, PublicTrade, SubscriptionType},
 };
@@ -29,39 +30,6 @@ pub use tokio_tungstenite::tungstenite::Error;
 /// When we want to change whether or not we are subscribed to a feed, we wait
 /// this long before we reissue the subscribe / unsubscribe request
 const SUBSCRIPTION_CHANGE_BACKOFF: Duration = Duration::from_secs(5);
-
-/// Configuration for the websocket connection and feeds to subscribe to
-#[derive(Clone, Debug)]
-pub struct KrakenWsConfig {
-    /// Order books to subscribe to
-    pub subscribe_book: Vec<String>,
-    /// Depth of order book subscriptions (how many ask/bid entries)
-    pub book_depth: usize,
-    /// Public trade streams to subscribe to
-    pub subscribe_trades: Vec<String>,
-    /// Optional configuration for private feeds
-    pub private: Option<KrakenPrivateWsConfig>,
-}
-
-impl Default for KrakenWsConfig {
-    fn default() -> Self {
-        Self {
-            subscribe_book: Default::default(),
-            book_depth: 10,
-            subscribe_trades: Default::default(),
-            private: None,
-        }
-    }
-}
-
-/// Configuration for private websockets feeds
-#[derive(Clone, Debug)]
-pub struct KrakenPrivateWsConfig {
-    /// Authentication token (get from REST API)
-    pub token: String,
-    /// If true, subscribe to own orders feed for this account
-    pub subscribe_open_orders: bool,
-}
 
 /// A sink where the ws worker can put updates for subscribed data
 #[derive(Default)]

@@ -21,13 +21,21 @@ use url::{ParseError as UrlParseError, Url};
 
 /// Configuration needed to initialize a Kraken client.
 /// The credentials aren't needed if only public APIs are used
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone)]
+#[non_exhaustive]
 pub struct KrakenRestConfig {
     /// The timeout to use for http connections
     /// Recommended is to use 30s.
-    pub timeout: Duration,
+    timeout: Duration,
     /// The credentials (if using private APIs)
-    pub creds: KrakenCredentials,
+    creds: KrakenCredentials,
+}
+
+impl KrakenRestConfig {
+    /// Create a builder for the KrakenRestConfig object
+    pub fn builder() -> KrakenRestConfigBuilder {
+        Default::default()
+    }
 }
 
 impl Default for KrakenRestConfig {
@@ -39,8 +47,46 @@ impl Default for KrakenRestConfig {
     }
 }
 
+/// Builder pattern for the KrakenRestConfig object
+#[derive(Default)]
+pub struct KrakenRestConfigBuilder {
+    config: KrakenRestConfig,
+}
+
+impl KrakenRestConfigBuilder {
+    /// Create a new builder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set timeout used for HTTP connections. The recommended (default) is 30 seconds
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.config.timeout = timeout;
+        self
+    }
+
+    /// Set credentials. Only needed if using private APIs.
+    pub fn creds(mut self, creds: KrakenCredentials) -> Self {
+        self.config.creds = creds;
+        self
+    }
+
+    /// Create a KrakenRestConfig
+    pub fn build(self) -> core::result::Result<KrakenRestConfig, BuilderError> {
+        Ok(self.config)
+    }
+}
+
+/// An error returned by a config builder
+#[derive(Debug, Display)]
+#[non_exhaustive]
+pub enum BuilderError {
+    /// A websockets token is required for these subscriptions
+    MissingWsToken,
+}
+
 /// Credentials needed to use private Kraken APIs.
-#[derive(Default, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Default, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct KrakenCredentials {
     /// The name of the API key
     pub key: String,

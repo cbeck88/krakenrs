@@ -19,8 +19,11 @@ use tokio::{
     time,
 };
 
+mod config;
+pub use config::{KrakenWsConfig, KrakenWsConfigBuilder};
+
 mod conn;
-pub use conn::{Error, KrakenPrivateWsConfig, KrakenWsClient, KrakenWsConfig, WsAPIResults};
+pub use conn::{Error, KrakenWsClient, WsAPIResults};
 
 mod types;
 pub use types::{BookData, BookEntry, PublicTrade};
@@ -337,6 +340,13 @@ impl Drop for KrakenWsAPI {
             drop(self.sender.send(LocalRequest::Stop));
             worker_thread.join().expect("Could not join thread");
         }
+    }
+}
+
+impl std::convert::TryFrom<KrakenWsConfig> for KrakenWsAPI {
+    type Error = Error;
+    fn try_from(src: KrakenWsConfig) -> Result<KrakenWsAPI, Error> {
+        KrakenWsAPI::new(src)
     }
 }
 

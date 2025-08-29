@@ -2,7 +2,7 @@ use displaydoc::Display;
 use env_logger::{fmt::Color, Builder, Env};
 use futures::executor::block_on;
 use krakenrs::{
-    ws::{KrakenPrivateWsConfig, KrakenWsAPI, KrakenWsConfig},
+    ws::{KrakenWsAPI, KrakenWsConfig},
     BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
 };
 use log::Level;
@@ -73,14 +73,15 @@ static PROCESS_TERMINATING: AtomicBool = AtomicBool::new(false);
 
 // Helper: Get a private websockets connection
 fn get_private_websockets_api(creds: &Option<PathBuf>) -> KrakenWsAPI {
-    // First get a websockets token
-    let mut kc_config = KrakenRestConfig::default();
-
+    // First get a websockets token, need rest for that
     // Load credentials from disk if specified
     let creds = creds.as_ref().expect("Missing credentials");
-
     log::info!("Credentials path: {:?}", creds);
-    kc_config.creds = KrakenCredentials::load_json_file(creds).expect("credential file error");
+
+    let kc_config = KrakenRestConfig::builder()
+        .creds(KrakenCredentials::load_json_file(creds).expect("credential file error"))
+        .build()
+        .expect("error building config");
 
     let api = KrakenRestAPI::try_from(kc_config).expect("could not create kraken api");
     let token = api
@@ -88,13 +89,12 @@ fn get_private_websockets_api(creds: &Option<PathBuf>) -> KrakenWsAPI {
         .expect("could not get websockets token")
         .token;
 
-    let ws_config = KrakenWsConfig {
-        private: Some(KrakenPrivateWsConfig {
-            token,
-            subscribe_open_orders: true,
-        }),
-        ..Default::default()
-    };
+    let ws_config = KrakenWsConfig::builder()
+        .token(token)
+        .subscribe_open_orders(true)
+        .build()
+        .expect("error building config");
+
     KrakenWsAPI::new(ws_config).expect("could not connect to websockets api")
 }
 
@@ -131,10 +131,11 @@ pub fn main() {
 
     match config.command {
         Command::Book { pairs } => {
-            let ws_config = KrakenWsConfig {
-                subscribe_book: pairs,
-                ..Default::default()
-            };
+            let ws_config = KrakenWsConfig::builder()
+                .subscribe_book(pairs)
+                .build()
+                .expect("error building config");
+
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
             let mut prev = api.get_all_books();
@@ -168,10 +169,10 @@ pub fn main() {
             }
         }
         Command::Trades { pair } => {
-            let ws_config = KrakenWsConfig {
-                subscribe_trades: vec![pair.clone()],
-                ..Default::default()
-            };
+            let ws_config = KrakenWsConfig::builder()
+                .subscribe_trades(vec![pair.clone()])
+                .build()
+                .expect("error building config");
             let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
             loop {

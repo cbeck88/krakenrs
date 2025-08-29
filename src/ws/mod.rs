@@ -47,6 +47,8 @@ pub struct KrakenWsAPI {
 impl KrakenWsAPI {
     /// Create a new web sockets connection to Kraken and subscribe to
     /// specified channels
+    ///
+    /// Note: This is the same as using `TryFrom::try_from` to construct an instance
     pub fn new(src: KrakenWsConfig) -> Result<Self, Error> {
         // Build the runtime for the new thread.
         //

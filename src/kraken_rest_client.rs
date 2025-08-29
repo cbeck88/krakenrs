@@ -143,6 +143,13 @@ impl TryFrom<KrakenRestConfig> for KrakenRestClient {
 }
 
 impl KrakenRestClient {
+    /// Try to create a new KrakenRestClient from config
+    ///
+    /// Note: This is the same as using `TryFrom::try_from` to construct an instance
+    pub fn new(config: KrakenRestConfig) -> Result<Self> {
+        Self::try_from(config)
+    }
+
     /// Change the credentials used
     pub fn set_creds(&mut self, creds: KrakenCredentials) {
         self.config.creds = creds;

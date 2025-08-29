@@ -95,11 +95,10 @@ use std::{
 fn main() {
     let pairs = vec!["USD/CAD".to_string()];
 
-    let ws_config = KrakenWsConfig {
-        subscribe_book: pairs.clone(),
-        book_depth: 10,
-        private: None
-    };
+    let ws_config = KrakenWsConfig::builder()
+        .subscribe_book(pairs)
+        .build()
+        .unwrap();
     let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
 
     loop {
@@ -139,7 +138,7 @@ Use at your own risk. If you build trading software using this component and you
 Rest API Demo
 -------------
 
-The `kraken` binary target is a simple demo that can be used to exercise the rest API functionality.
+The `kraken` example target is a simple demo that can be used to exercise the rest API functionality.
 It is a command-line target that can parse a credentials file, connect to kraken and make a single
 API call, and print the response.
 

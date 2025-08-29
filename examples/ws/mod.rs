@@ -15,7 +15,7 @@ use std::{
 };
 use structopt::StructOpt;
 
-/// Structure representing parsed command-line arguments to krak-feed executable
+/// Structure representing parsed command-line arguments to kraken-feed executable
 #[derive(StructOpt)]
 struct KrakenFeedConfig {
     #[structopt(subcommand)]
@@ -30,7 +30,7 @@ struct KrakenFeedConfig {
     validate: bool,
 }
 
-/// Commands supported by krak-feed executable
+/// Commands supported by kraken-feed executable
 #[derive(StructOpt, Display)]
 enum Command {
     /// Get websockets feed for one or more asset-pair books

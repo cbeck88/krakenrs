@@ -24,9 +24,9 @@ Features
 To get the websockets API, the `"ws"` feature must be enabled. It is on by default.
 Otherwise you only get the REST API, which can do all the same things (and more), but has more strict rate limits.
 
-Note that we only support Kraken's websockets v1 API right now. In the future we might either migrate to (or simply add support for) the v2 API, but it would be a major version bump.
+We only support Kraken's websockets v1 API right now. In the future we might add support for the websockets v2 API. We don't plan to deprecate the websockets v1 API bindings anytime soon -- they still work great.
 
-Note that as of version 6, `serde_json/arbitrary_precision` feature is required for the crate to work, because some parts of the websockets v1 API represent unix timestamps as json numbers. This may have some performance impact for other parts of your project, because the json parser will make more string allocations and save all numbers as String for longer. But in most cases it shouldn't be a big deal. If this is bad for you, stick to version 5, or you may help us move to v2 API support.
+As of version 6, `serde_json/arbitrary_precision` feature is required for the crate to work, because some parts of the REST API and the websockets v1 API represent unix timestamps as json numbers. This may have some performance impact for other parts of your project, because the json parser will make more string allocations. But in most cases it shouldn't be a big deal. If this is a problem for your project, what I suggest is to stick to version 5 if possible. Otherwise, we could contemplate using feature flagging to remove those library features that would break if `arbitrary_precision` is off, or support using an alternative json implementation to `serde_json`. Please open a github issue if you want to discuss and contribute to this.
 
 Threading
 ---------
@@ -48,7 +48,8 @@ Instead, it seems better to lean on the Websockets API, which is easy to use whe
 an async runtime or not, and not make lots of calls to the REST API.
 
 If you are using an async runtime like tokio, you can avoid blocking the executor by wrapping sequences of calls to
-the REST API with `task::block_in_place` or similar, or just do all of it on a blocking thread.
+the REST API with `task::spawn_blocking` or similar, or just do all of your work with `krakenrs` on a blocking thread
+and use channels etc. to pass data around.
 
 Examples
 --------

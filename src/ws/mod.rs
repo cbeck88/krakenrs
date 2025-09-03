@@ -49,6 +49,11 @@ impl KrakenWsAPI {
     /// specified channels
     ///
     /// Note: This is the same as using `TryFrom::try_from` to construct an instance
+    ///
+    /// Note: This call attempts to fail fast if a websockets connection cannot be established,
+    /// so it will block the current thread on that and return an error if connection fails.
+    /// If you are using the tokio multi-threaded runtime, you must call this from a blocking thread,
+    /// or the runtime will detect this and panic. You may wrap it in `task::spawn_blocking` or similar.
     pub fn new(src: KrakenWsConfig) -> Result<Self, Error> {
         // Build the runtime for the new thread.
         //

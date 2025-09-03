@@ -159,6 +159,7 @@ pub type GetRecentTradesResponse = LastAndData<Vec<PublicTrade>>;
 
 /// A sub-object of the recent-trades response
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(expecting = "expecting [<price>, <volume>, <timestamp>, <buy/sell>, <order_type>, <misc>, <trade_id>] array")]
 pub struct PublicTrade {
     /// The price at which the trade took place
     pub price: Decimal,
@@ -176,6 +177,39 @@ pub struct PublicTrade {
     /// The trade id (an incrementing counter identifying trades)
     /// Note that this isn't visible in the websockets v1 trade feed interface
     pub trade_id: u64,
+}
+
+/// A query object to kraken public "Get OHLC Data" API call
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct GetOHLCDataRequest {
+    /// An asset pair
+    pub pair: String,
+    /// Return ohlc data since given timestamp
+    pub since: Option<String>,
+    /// A number of minutes for the width of each candle. Defaults to 1 minute.
+    /// Allowed values are:
+    /// 1, 5, 15, 30, 60, 240, 1440, 10080, 21600
+    pub interval: Option<u16>,
+}
+
+/// Response object of Get OHLC data API call
+/// (Note: See issue #3 for discussion of strategy)
+pub type GetOHLCDataResponse = LastAndData<Vec<Candle>>;
+
+/// A sub-object of the OHLC data response
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(expecting = "expecting [<timestamp>, <open>, <high>, <low>, <close>, <vwap>, <volume>, <trades>] array")]
+pub struct Candle {
+    /// The timestamp of the candle (seconds since the unix epoch)
+    #[serde(deserialize_with = "rust_decimal::serde::arbitrary_precision::deserialize")]
+    pub timestamp: Decimal,
+    pub open: Decimal,
+    pub high: Decimal,
+    pub low: Decimal,
+    pub close: Decimal,
+    pub vwap: Decimal,
+    pub volume: Decimal,
+    pub trades: usize,
 }
 
 /// Type alias for response of Balance API call
@@ -541,5 +575,16 @@ mod tests {
 
         assert_eq!(obj.data.len(), 3);
         assert_eq!(obj.last, "1756443816201051892");
+    }
+
+    #[test]
+    fn test_get_ohlc_data_response() {
+        // This text from kraken docs api console
+        let text = r#"{"BTC/USD": [[1756880160,"110680.0","110680.0","110679.9","110680.0","110679.9","0.09192328",12],[1756880220,"110680.0","110680.0","110680.0","110680.0","110680.0","7.19286980",22],[1756880280,"110680.0","110691.1","110680.0","110691.1","110680.0","0.67532130",16],[1756880340,"110691.1","110716.6","110691.1","110716.5","110708.2","0.02984317",13],[1756880400,"110724.8","110724.9","110724.8","110724.9","110724.8","0.00802704",3],[1756880460,"110734.9","110739.0","110734.9","110739.0","110735.4","0.01682744",6],[1756880520,"110759.1","110759.1","110759.0","110759.0","110759.0","0.02548629",2],[1756880580,"110759.1","110775.1","110759.1","110775.1","110766.5","0.01183179",10],[1756880640,"110775.1","110779.7","110775.0","110779.6","110779.1","0.04210282",11]],"last": 1756923300}"#;
+
+        let obj: GetOHLCDataResponse = serde_json::from_str(text).unwrap();
+
+        assert_eq!(obj.data.len(), 9);
+        assert_eq!(obj.last, "1756923300");
     }
 }

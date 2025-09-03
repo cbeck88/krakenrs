@@ -11,14 +11,16 @@ pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
-    AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty, GetOpenOrdersRequest,
-    GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest, unpack_kraken_result,
+    AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty, GetOHLCDataRequest,
+    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
+    unpack_kraken_result,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
     BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, FeeTierInfo,
-    GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded,
-    OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    GetOHLCDataResponse, GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse,
+    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse,
+    TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -107,6 +109,50 @@ impl KrakenRestAPI {
         let result: Result<KrakenResult<TickerResponse>> = self
             .client
             .query_public("Ticker", TickerRequest { pair: pairs.join(",") });
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Public) Get OHLC data for an asset pair, at one minute intervals.
+    /// Optionally pass "since", and will only return data after that timestamp.
+    /// (Intended for incremental updates).
+    /// Returns up to 720 of the most recent entries.
+    /// Older data cannot be retrieved, regardless of the value of since.
+    ///
+    /// Arguments:
+    /// * pair: Which asset pair to get data for
+    /// * since: A timestamp to get data since
+    pub fn ohlc(&self, pair: String, since: Option<String>) -> Result<GetOHLCDataResponse> {
+        let result: Result<KrakenResult<GetOHLCDataResponse>> = self.client.query_public(
+            "OHLC",
+            GetOHLCDataRequest {
+                pair,
+                since,
+                interval: None,
+            },
+        );
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Public) Get OHLC data for an asset pair, at user-specified interval number of minutes.
+    /// Valid intervals are 1, 5, 15, 30, 60, 240, 1440, 10080, 21600.
+    ///
+    /// Optionally pass "since", and will only return data after that timestamp.
+    /// (Intended for incremental updates).
+    /// Returns up to 720 of the most recent entries.
+    /// Older data cannot be retrieved, regardless of the value of since.
+    ///
+    /// Arguments:
+    /// * pair: Which asset pair to get data for
+    /// * since: A timestamp to get data since
+    pub fn ohlc_at_interval(&self, pair: String, interval: u16, since: Option<String>) -> Result<GetOHLCDataResponse> {
+        let result: Result<KrakenResult<GetOHLCDataResponse>> = self.client.query_public(
+            "OHLC",
+            GetOHLCDataRequest {
+                pair,
+                since,
+                interval: Some(interval),
+            },
+        );
         result.and_then(unpack_kraken_result)
     }
 

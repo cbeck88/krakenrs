@@ -2,10 +2,11 @@ use super::messages::BsType;
 use displaydoc::Display;
 use rust_decimal::Decimal;
 use serde_json::Value;
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::BTreeMap, str::FromStr, time::Instant};
 
 /// The state of the book for some asset pair
 #[derive(Default, Clone, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct BookData {
     /// The current asks, sorted by price
     pub ask: BTreeMap<Decimal, BookEntry>,
@@ -13,6 +14,8 @@ pub struct BookData {
     pub bid: BTreeMap<Decimal, BookEntry>,
     /// Indicates that the book data is invalid
     pub checksum_failed: bool,
+    /// When the book was last updated (if ever)
+    pub last_update: Option<Instant>,
 }
 
 impl BookData {
@@ -97,6 +100,7 @@ impl BookData {
 
 /// An entry in an order book
 #[derive(Default, Clone, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct BookEntry {
     /// The volume of this book entry
     pub volume: Decimal,
@@ -125,6 +129,7 @@ impl BookEntry {
 
 /// A record of a public trade
 #[derive(Default, Clone, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct PublicTrade {
     /// The price at which this trade took place
     pub price: Decimal,
@@ -139,6 +144,7 @@ pub struct PublicTrade {
 /// Possible subscription types in Kraken WS api (v1)
 /// Only supported types are listed here
 #[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum SubscriptionType {
     /// book
     Book,

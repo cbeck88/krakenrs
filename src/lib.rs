@@ -63,6 +63,13 @@ pub struct KrakenRestAPI {
 }
 
 impl KrakenRestAPI {
+    /// Try to create RestAPI instance from config
+    pub fn new(src: KrakenRestConfig) -> Result<Self> {
+        Ok(KrakenRestAPI {
+            client: KrakenRestClient::try_from(src)?,
+        })
+    }
+
     /// (Public) Get the kraken system's time
     pub fn time(&self) -> Result<TimeResponse> {
         let result: Result<KrakenResult<TimeResponse>> = self.client.query_public("Time", Empty {});
@@ -236,8 +243,6 @@ impl KrakenRestAPI {
 impl TryFrom<KrakenRestConfig> for KrakenRestAPI {
     type Error = Error;
     fn try_from(src: KrakenRestConfig) -> Result<Self> {
-        Ok(KrakenRestAPI {
-            client: KrakenRestClient::try_from(src)?,
-        })
+        Self::new(src)
     }
 }

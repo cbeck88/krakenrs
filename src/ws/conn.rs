@@ -33,6 +33,7 @@ const SUBSCRIPTION_CHANGE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// A sink where the ws worker can put updates for subscribed data
 #[derive(Default)]
+#[non_exhaustive]
 pub struct WsAPIResults {
     /// Current system status
     pub system_status: Mutex<Option<SystemStatus>>,
@@ -879,6 +880,7 @@ impl KrakenWsClient {
             } else {
                 return Err("update had no usable data");
             }
+            book.last_update = Some(Instant::now());
             Ok(())
         } else {
             Err("unexpected channel name")

@@ -141,6 +141,37 @@ pub struct PublicTrade {
     pub timestamp: Decimal,
 }
 
+/// A candle record contains information about price activity during an "epoch".
+/// The interval is set when the feed is subscribed to, and determines the duration
+/// of the epoch in minutes. The candle record includes the end timestamp of the epoch,
+/// the highest and lowest price levels observed during the epoch, the open and close
+/// prices during the epoch, etc.
+///
+/// Kraken sends "partial" candle records, so not every candle record indicates
+/// the final values for that epoch. Multiple candles may be received with the same
+/// `epoc_end` but increasing values of `epoc_last`.
+/// The last candle record received with a given value of `epoc_end` indicates the final candle values for that epoch.
+#[derive(Default, Clone, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct Candle {
+    /// Last update time of the candle (seconds since epoch)
+    pub epoc_last: Decimal,
+    /// End time of the candle (seconds since epoch)
+    pub epoc_end: Decimal,
+    /// Open price of the candle
+    pub open: Decimal,
+    /// High price of the candle
+    pub high: Decimal,
+    /// Low price of the candle
+    pub low: Decimal,
+    /// Close price of the candle
+    pub close: Decimal,
+    /// Volume-weighted average price of the candle
+    pub vwap: Decimal,
+    /// Volume of the candle
+    pub volume: Decimal,
+}
+
 /// Possible subscription types in Kraken WS api (v1)
 /// Only supported types are listed here
 #[derive(Debug, Display, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -152,6 +183,8 @@ pub enum SubscriptionType {
     OpenOrders,
     /// trade
     Trade,
+    /// ohlc
+    Ohlc,
 }
 
 impl FromStr for SubscriptionType {
@@ -161,6 +194,7 @@ impl FromStr for SubscriptionType {
             "book" => Ok(SubscriptionType::Book),
             "openOrders" => Ok(SubscriptionType::OpenOrders),
             "trade" => Ok(SubscriptionType::Trade),
+            "ohlc" => Ok(SubscriptionType::Ohlc),
             _ => Err("unknown subscription type"),
         }
     }

@@ -1,7 +1,7 @@
 use super::{
     config::KrakenWsConfig,
     messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
-    types::{BookData, PublicTrade, SubscriptionType},
+    types::{BookData, Candle, PublicTrade, SubscriptionType},
 };
 use futures::{
     SinkExt, StreamExt,
@@ -39,6 +39,8 @@ pub struct WsAPIResults {
     pub system_status: Mutex<Option<SystemStatus>>,
     /// Map Asset Pair -> Book data
     pub book: HashMap<String, Mutex<BookData>>,
+    /// Map Asset Pair -> Ohlc data
+    pub ohlc: HashMap<String, Mutex<Vec<Candle>>>,
     /// Map Asset Pair -> Public trade data
     pub trades: HashMap<String, Mutex<Vec<PublicTrade>>>,
     /// Map order id -> open orders
@@ -112,6 +114,9 @@ impl KrakenWsClient {
                 .trades
                 .insert(pair.to_owned(), Mutex::new(Default::default()));
         }
+        for pair in config.subscribe_ohlc.iter() {
+            api_results.ohlc.insert(pair.to_owned(), Mutex::new(Default::default()));
+        }
 
         let output = Arc::new(api_results);
         let mut result = Self {
@@ -138,6 +143,12 @@ impl KrakenWsClient {
             result.subscription_tracker.get_trade(pair.to_owned()).last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
             result.subscribe_trade(pair.to_string()).await?;
+        }
+
+        for pair in config.subscribe_ohlc.iter() {
+            result.subscription_tracker.get_ohlc(pair.to_owned()).last_request =
+                Some((SubscriptionStatus::Subscribed, Instant::now()));
+            result.subscribe_ohlc(pair.to_string()).await?;
         }
 
         if config.private.is_some() {
@@ -201,6 +212,17 @@ impl KrakenWsClient {
             }
         }
 
+        for (asset_pair, sub) in self.subscription_tracker.ohlc_subscriptions.iter_mut() {
+            if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
+                sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
+                if let Err(err) =
+                    Self::unsubscribe_ohlc(&mut self.sink, self.config.ohlc_interval, asset_pair.clone()).await
+                {
+                    log::error!("Could not unsubscribe from ohlc {}: {}", asset_pair.clone(), err);
+                }
+            }
+        }
+
         for (asset_pair, sub) in self.subscription_tracker.trade_subscriptions.iter_mut() {
             if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
                 sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
@@ -229,6 +251,17 @@ impl KrakenWsClient {
                 sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
                 if let Err(err) = self.subscribe_book(asset_pair.to_string()).await {
                     log::error!("Could not subscribe to book '{}': {}", asset_pair, err);
+                }
+            }
+        }
+
+        for asset_pair in self.config.subscribe_ohlc.clone() {
+            let sub = self.subscription_tracker.get_ohlc(asset_pair.to_string());
+            if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                log::info!("Resubscribing to ohlc '{}'", asset_pair);
+                sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                if let Err(err) = self.subscribe_ohlc(asset_pair.to_string()).await {
+                    log::error!("Could not subscribe to ohlc '{}': {}", asset_pair, err);
                 }
             }
         }
@@ -473,6 +506,34 @@ impl KrakenWsClient {
         sink.send(Message::Text(payload.to_string().into())).await
     }
 
+    /// Subscribe to an ohlc stream
+    async fn subscribe_ohlc(&mut self, pair: String) -> Result<(), Error> {
+        let payload = json!({
+            "event": "subscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "ohlc",
+                "interval": self.config.ohlc_interval,
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string().into())).await
+    }
+
+    /// Unsubscribe from an ohlc stream
+    ///
+    /// Note: We made this not take self, to resolve a borrow checker issue
+    async fn unsubscribe_ohlc(sink: &mut SinkType, ohlc_interval: u16, pair: String) -> Result<(), Error> {
+        let payload = json!({
+            "event": "unsubscribe",
+            "pair": [pair],
+            "subscription": {
+                "name": "ohlc",
+                "interval": ohlc_interval,
+            },
+        });
+        sink.send(Message::Text(payload.to_string().into())).await
+    }
+
     /// Subscribe to the openOrders strream
     async fn subscribe_open_orders(&mut self) -> Result<(), Error> {
         let private_config = self
@@ -626,7 +687,23 @@ impl KrakenWsClient {
                         self.subscription_tracker.add_book_channel(channel_name.to_string());
                         let sub = self.subscription_tracker.get_book(pair.to_string());
                         if sub.status != status {
-                            log::info!("{} @ {} book: {}", status, pair, channel_name);
+                            log::info!("{status} @ {pair} book: {channel_name}");
+                            *sub = SubscriptionState::new(status);
+                        } else {
+                            log::warn!("Unexpected repeated {} message: {:?}", status, map);
+                        }
+                    }
+                    SubscriptionType::Ohlc => {
+                        let pair = map
+                            .get("pair")
+                            .ok_or("Missing pair")?
+                            .as_str()
+                            .ok_or("pair was not a string")?;
+
+                        self.subscription_tracker.add_ohlc_channel(channel_name.to_string());
+                        let sub = self.subscription_tracker.get_ohlc(pair.to_string());
+                        if sub.status != status {
+                            log::info!("{status} @ {pair} ohlc: {channel_name}");
                             *sub = SubscriptionState::new(status);
                         } else {
                             log::warn!("Unexpected repeated {} message: {:?}", status, map);
@@ -642,7 +719,7 @@ impl KrakenWsClient {
 
                         let sub = self.subscription_tracker.get_trade(pair.to_string());
                         if sub.status != status {
-                            log::info!("{} @ {} trade: {}", status, pair, channel_name);
+                            log::info!("{status} @ {pair} trade: {channel_name}");
                             *sub = SubscriptionState::new(status);
                         } else {
                             log::warn!("Unexpected repeated {} message: {:?}", status, map);
@@ -882,6 +959,66 @@ impl KrakenWsClient {
             }
             book.last_update = Some(Instant::now());
             Ok(())
+        } else if self.subscription_tracker.is_ohlc_channel(channel_name) {
+            // This looks like an ohlc message. The last item should be the asset pair
+            let pair = array
+                .last()
+                .ok_or("index invalid")?
+                .as_str()
+                .ok_or("ohlc message did not have asset pair string as last item")?;
+
+            // Check if this matches an ohlc subscription
+            let sub = self.subscription_tracker.get_ohlc(pair.to_string());
+            if !sub.status.is_subscribed() {
+                return Err("unexpected ohlc message, not subscribed");
+            }
+
+            let mut lk = self
+                .output
+                .ohlc
+                .get(pair)
+                .ok_or("unexpected asset pair update -- check asset pair name")?
+                .lock()
+                .expect("mutex poisoned");
+
+            let data = array[1].as_array().ok_or("expected one candle, an array")?;
+
+            lk.reserve(1);
+
+            if data.len() < 9 {
+                return Err("Expected at least 9 entries in the array");
+            }
+
+            let epoc_last_str = data[0].as_str().ok_or("expected epoc_last to be a str")?;
+            let epoc_end_str = data[1].as_str().ok_or("expected epoc_end to be a str")?;
+            let open_str = data[2].as_str().ok_or("expected open to be a str")?;
+            let high_str = data[3].as_str().ok_or("expected high to be a str")?;
+            let low_str = data[4].as_str().ok_or("expected low to be a str")?;
+            let close_str = data[5].as_str().ok_or("expected close to be a str")?;
+            let vwap_str = data[6].as_str().ok_or("expected vwap to be a str")?;
+            let volume_str = data[7].as_str().ok_or("expected volume to be a str")?;
+
+            let epoc_last = Decimal::from_str(epoc_last_str).map_err(|_| "could not parse epoc_last")?;
+            let epoc_end = Decimal::from_str(epoc_end_str).map_err(|_| "could not parse epoc_end")?;
+            let open = Decimal::from_str(open_str).map_err(|_| "could not parse open")?;
+            let high = Decimal::from_str(high_str).map_err(|_| "could not parse high")?;
+            let low = Decimal::from_str(low_str).map_err(|_| "could not parse low")?;
+            let close = Decimal::from_str(close_str).map_err(|_| "could not parse close")?;
+            let vwap = Decimal::from_str(vwap_str).map_err(|_| "could not parse vwap")?;
+            let volume = Decimal::from_str(volume_str).map_err(|_| "could not parse volume")?;
+
+            lk.push(Candle {
+                epoc_last,
+                epoc_end,
+                open,
+                high,
+                low,
+                close,
+                vwap,
+                volume,
+            });
+
+            Ok(())
         } else {
             Err("unexpected channel name")
         }
@@ -1033,6 +1170,10 @@ struct SubscriptionTracker {
     book_subscriptions: HashMap<String, SubscriptionState>,
     /// Known book channel names
     book_channels: HashSet<String>,
+    /// A map from asset-pairs to ohlc subscription states
+    ohlc_subscriptions: HashMap<String, SubscriptionState>,
+    /// Known ohlc channel names
+    ohlc_channels: HashSet<String>,
     /// A map from asset-pairs to trade subscription states
     trade_subscriptions: HashMap<String, SubscriptionState>,
     /// Subscription state of the openOrders channel
@@ -1050,6 +1191,18 @@ impl SubscriptionTracker {
 
     pub fn get_book(&mut self, asset_pair: String) -> &mut SubscriptionState {
         self.book_subscriptions.entry(asset_pair).or_default()
+    }
+
+    pub fn is_ohlc_channel(&self, ohlc_channel: &str) -> bool {
+        self.ohlc_channels.contains(ohlc_channel)
+    }
+
+    pub fn add_ohlc_channel(&mut self, ohlc_channel: String) {
+        self.ohlc_channels.insert(ohlc_channel);
+    }
+
+    pub fn get_ohlc(&mut self, asset_pair: String) -> &mut SubscriptionState {
+        self.ohlc_subscriptions.entry(asset_pair).or_default()
     }
 
     pub fn get_trade(&mut self, asset_pair: String) -> &mut SubscriptionState {

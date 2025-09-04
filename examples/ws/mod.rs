@@ -36,6 +36,9 @@ enum Command {
     /// Get websockets feed for one or more asset-pair books
     Book { pairs: Vec<String> },
 
+    /// Get websockets feed for an asset-pair candle
+    Ohlc { pair: String },
+
     /// Get public trades feed for one asset-pair
     Trades { pair: String },
 
@@ -184,6 +187,32 @@ pub fn main() {
                     let side = t.side;
                     let timestamp = t.timestamp;
                     println!("{side} {volume} {pair} @ {price} ({timestamp})");
+                }
+
+                if api.stream_closed() {
+                    log::info!("Stream closed");
+                    return;
+                }
+            }
+        }
+        Command::Ohlc { pair } => {
+            let ws_config = KrakenWsConfig::builder()
+                .subscribe_ohlc(vec![pair.clone()])
+                .build()
+                .expect("error building config");
+            let api = KrakenWsAPI::new(ws_config).expect("could not connect to websockets api");
+
+            loop {
+                let next = api.get_ohlc(&pair).expect("asset pair should be known");
+
+                for t in next {
+                    let upd_time = t.epoc_last;
+                    let end_time = t.epoc_end;
+                    let open = t.open;
+                    let close = t.close;
+                    let high = t.high;
+                    let low = t.low;
+                    println!("{open} {high} {low} {close} ({upd_time} {end_time})");
                 }
 
                 if api.stream_closed() {

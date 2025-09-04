@@ -26,7 +26,7 @@ mod conn;
 pub use conn::{Error, KrakenWsClient, WsAPIResults};
 
 mod types;
-pub use types::{BookData, BookEntry, PublicTrade};
+pub use types::{BookData, BookEntry, Candle, PublicTrade};
 
 mod messages;
 pub use messages::*;
@@ -181,6 +181,19 @@ impl KrakenWsAPI {
             .book
             .get(asset_pair)
             .map(|lock| lock.lock().expect("mutex poisoned").clone())
+    }
+
+    /// Get the most recent trades that we have seen, for an individual asset pair
+    /// Note that these can only be retrieved once and are not delivered to the next consumer.
+    ///
+    /// Returns None only if the asset pair is unknown, which is usually a logic error.
+    pub fn get_ohlc(&self, asset_pair: &str) -> Option<Vec<Candle>> {
+        self.output.ohlc.get(asset_pair).map(|lock| {
+            let mut lk = lock.lock().expect("mutex poisoned");
+            let result = lk.clone();
+            lk.clear(); // note, this doesn't reduce the capacity
+            result
+        })
     }
 
     /// Get the most recent trades that we have seen, for an individual asset pair

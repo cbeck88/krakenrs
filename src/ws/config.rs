@@ -10,6 +10,10 @@ pub struct KrakenWsConfig {
     pub(crate) book_depth: usize,
     /// Public trade streams to subscribe to
     pub(crate) subscribe_trades: Vec<String>,
+    /// Public ohlc streams to subscribe to
+    pub(crate) subscribe_ohlc: Vec<String>,
+    /// Ohlc interval length (how many minutes per candle)
+    pub(crate) ohlc_interval: u16,
     /// Optional configuration for private feeds
     pub(crate) private: Option<KrakenPrivateWsConfig>,
 }
@@ -27,6 +31,8 @@ impl Default for KrakenWsConfig {
             subscribe_book: Default::default(),
             book_depth: 10,
             subscribe_trades: Default::default(),
+            subscribe_ohlc: Default::default(),
+            ohlc_interval: 1,
             private: None,
         }
     }
@@ -64,6 +70,25 @@ impl KrakenWsConfigBuilder {
     /// this queue, or your program will face memory exhaustion eventually.
     pub fn subscribe_trades(mut self, subscribe_trades: Vec<String>) -> Self {
         self.config.subscribe_trades = subscribe_trades;
+        self
+    }
+
+    /// Websockets names of asset pairs whose public trade feeds to subscribe to
+    ///
+    /// Note: Unlike book and open order info, the queue of received candles will grow unbounded
+    /// over time. You must periodically call `KrakenWsAPI::get_ohlc(...)` or similar to drain
+    /// this queue, or your program will face memory exhaustion eventually.
+    pub fn subscribe_ohlc(mut self, subscribe_ohlc: Vec<String>) -> Self {
+        self.config.subscribe_ohlc = subscribe_ohlc;
+        self
+    }
+
+    /// The ohlc interval is the "width" of each candle in minutes.
+    /// Default is 1
+    /// Allowed values are:
+    /// 1, 5, 15, 30, 60, 240, 1440, 10080, 21600
+    pub fn ohlc_interval(mut self, ohlc_interval: u16) -> Self {
+        self.config.ohlc_interval = ohlc_interval;
         self
     }
 

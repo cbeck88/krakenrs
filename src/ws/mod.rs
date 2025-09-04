@@ -2,8 +2,8 @@
 //! the updates from the websockets connection.
 //!
 //! This follows the pattern of bridging async code into a sync interface
-//! See also: https://tokio.rs/tokio/topics/bridging
-//! and the reqwest::blocking module
+//! See also: <https://tokio.rs/tokio/topics/bridging>
+//! and the `reqwest::blocking` module
 
 use crate::{LimitOrder, MarketOrder};
 use futures::stream::StreamExt;

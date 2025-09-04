@@ -1,5 +1,5 @@
 //! Structures and enums which are deserialized from json in the Kraken WS API
-//! https://docs.kraken.com/websockets/
+//! <https://docs.kraken.com/websockets/>
 //!
 //! Some of these are near duplicates of structures in the Kraken REST API,
 //! because there are actually slight differences in the schemas and strings

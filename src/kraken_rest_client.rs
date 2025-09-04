@@ -1,6 +1,6 @@
 //! This module provides a low-level client for kraken API handling required headers
 //! and serialization. It is similar to krakenex python code, but less messy.
-//! https://github.com/veox/python3-krakenex/blob/master/krakenex/api.py
+//! <https://github.com/veox/python3-krakenex/blob/master/krakenex/api.py>
 
 use displaydoc::Display;
 use hmac::{Hmac, Mac};

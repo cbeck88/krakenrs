@@ -18,7 +18,7 @@ use serde::{
 /// Idiomatically, we'd like to make this key static, so that it's easier to get
 /// to the data in rust, and an extra layer of hashmap etc. is not needed.
 ///
-/// LastAndData<T> has a custom deserialize implementation that accomplishes this,
+/// `LastAndData<T>` has a custom deserialize implementation that accomplishes this,
 /// based on comments in issue #3.
 ///
 /// This dynamic key simply becomes "data" after deserializing this way.

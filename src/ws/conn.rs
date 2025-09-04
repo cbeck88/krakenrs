@@ -87,12 +87,12 @@ impl KrakenWsClient {
     ///   the caller and the result passed to "update". The client and stream should be
     ///   dropped if update yields an error.
     ///
-    ///   Note: Use KrakenWsAPI if you want a batteries included version of this.
+    ///   Note: Use [crate::ws::KrakenWsAPI] if you want a batteries included version of this.
     ///   If you want control over exactly how that
-    ///   polling is working then you should call KrakenWsClient::new and wire it
+    ///   polling is working then you should call `KrakenWsClient::new` and wire it
     ///   up as you like.
-    /// * Arc<WsApiResults>. This may be shared with synchronous code and polled for updates.
-    ///   Note: KrakenWsAPI also conceals this detail.
+    /// * `Arc<WsApiResults>`. This may be shared with synchronous code and polled for updates.
+    ///   Note: [crate::ws::KrakenWsAPI] also conceals this detail.
     pub async fn new(config: KrakenWsConfig) -> Result<(Self, SplitStream<WsClient>, Arc<WsAPIResults>), Error> {
         let url: Uri = if config.private.is_some() {
             "wss://ws-auth.kraken.com".parse().unwrap()

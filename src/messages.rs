@@ -1,5 +1,5 @@
 //! Structures representing json schema sent to and from Kraken REST API
-//! https://docs.kraken.com/rest/
+//! <https://docs.kraken.com/rest/>
 
 use crate::{Error, LastAndData, Result};
 use displaydoc::Display;

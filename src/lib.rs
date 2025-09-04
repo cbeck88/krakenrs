@@ -1,5 +1,9 @@
 //! A rust crate for making requests to the Kraken Rest API and subscribing
 //! to Kraken websockets feeds
+//!
+//! [KrakenRestAPI] is the main touchpoint for the rest side of things.
+//!
+//! [ws::KrakenWsAPI] is the main touchpoint for the websockets side of things.
 
 #![deny(missing_docs)]
 

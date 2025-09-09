@@ -7,7 +7,7 @@ Unofficial bindings to Kraken spot trading API in Rust.
 [![Crates.io](https://img.shields.io/crates/d/conf?style=flat-square)](https://crates.io/crates/krakenrs)
 [![License](https://img.shields.io/badge/license-WTFPL%202.0-blue?style=flat-square)](LICENSE-WTFPL)
 
-[API Docs](https://docs.rs/krakens/latest/krakenrs/) | [Examples](./examples)
+[API Docs](https://docs.rs/krakenrs/latest/krakenrs/) | [Examples](./examples)
 
 This library provides a Rust client object implementing many of the calls from the [Kraken REST API](https://docs.kraken.com/rest/)
 with an idiomatic Rust interface, including getting ticker info and making market and limit orders. Additionally it provides access

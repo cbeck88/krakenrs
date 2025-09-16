@@ -108,6 +108,18 @@ impl KrakenWsConfigBuilder {
         self
     }
 
+    /// Whether to subscribe to a feed of our own trades. Note that this is
+    /// a private API and requires a websockets token
+    ///
+    /// Note: The queue of own trades will grow unbounded over time. You must periodically
+    /// call `KrakenWsAPI::get_own_trades()` to drain this queue, or your program will
+    /// face memory exhaustion eventually.
+    pub fn subscribe_own_trades(mut self, subscribe_own_trades: bool) -> Self {
+        let private = self.config.private.get_or_insert_default();
+        private.subscribe_own_trades = subscribe_own_trades;
+        self
+    }
+
     /// Build a valid KrakenWsConfig if possible
     pub fn build(self) -> Result<KrakenWsConfig, BuilderError> {
         if let Some(private) = self.config.private.as_ref()
@@ -126,4 +138,6 @@ pub(crate) struct KrakenPrivateWsConfig {
     pub(crate) token: String,
     /// If true, subscribe to own orders feed for this account
     pub(crate) subscribe_open_orders: bool,
+    /// If true, subscribe to own trades feed for this account
+    pub(crate) subscribe_own_trades: bool,
 }

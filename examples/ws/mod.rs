@@ -3,7 +3,7 @@ use env_logger::{Builder, Env, fmt::Color};
 use futures::executor::block_on;
 use krakenrs::{
     BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
-    ws::{KrakenWsAPI, KrakenWsConfig},
+    ws::{KrakenWsAPI, KrakenWsConfig, KrakenWsConfigBuilder},
 };
 use log::Level;
 use std::{
@@ -45,6 +45,9 @@ enum Command {
     /// Get websockets feed for own open orders
     OpenOrders {},
 
+    /// Get websockets feed for own trades
+    OwnTrades {},
+
     /// Market buy order: {volume} {pair}
     MarketBuy { volume: String, pair: String },
 
@@ -75,7 +78,7 @@ enum Command {
 static PROCESS_TERMINATING: AtomicBool = AtomicBool::new(false);
 
 // Helper: Get a private websockets connection
-fn get_private_websockets_api(creds: &Option<PathBuf>) -> KrakenWsAPI {
+fn get_private_ws_builder(creds: &Option<PathBuf>) -> KrakenWsConfigBuilder {
     // First get a websockets token, need rest for that
     // Load credentials from disk if specified
     let creds = creds.as_ref().expect("Missing credentials");
@@ -92,13 +95,7 @@ fn get_private_websockets_api(creds: &Option<PathBuf>) -> KrakenWsAPI {
         .expect("could not get websockets token")
         .token;
 
-    let ws_config = KrakenWsConfig::builder()
-        .token(token)
-        .subscribe_open_orders(true)
-        .build()
-        .expect("error building config");
-
-    KrakenWsAPI::new(ws_config).expect("could not connect to websockets api")
+    KrakenWsConfig::builder().token(token)
 }
 
 pub fn main() {
@@ -222,7 +219,11 @@ pub fn main() {
             }
         }
         Command::OpenOrders {} => {
-            let api = get_private_websockets_api(&config.creds);
+            let config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(config).expect("couldn't connect ws");
 
             let mut prev = api.get_open_orders();
 
@@ -247,8 +248,32 @@ pub fn main() {
                 }
             }
         }
+        Command::OwnTrades {} => {
+            let config = get_private_ws_builder(&config.creds)
+                .subscribe_own_trades(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(config).expect("couldn't connect ws");
+
+            loop {
+                let next = api.get_own_trades();
+
+                for t in next {
+                    println!("{}", serde_json::to_string_pretty(&t).unwrap());
+                }
+
+                if api.stream_closed() {
+                    log::info!("Stream closed");
+                    return;
+                }
+            }
+        }
         Command::MarketBuy { volume, pair } => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let result = api
                 .add_market_order(
@@ -268,7 +293,11 @@ pub fn main() {
             }
         }
         Command::MarketSell { volume, pair } => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let result = api
                 .add_market_order(
@@ -288,7 +317,11 @@ pub fn main() {
             }
         }
         Command::LimitBuy { volume, pair, price } => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let mut oflags = BTreeSet::new();
             oflags.insert(OrderFlag::Post);
@@ -311,7 +344,11 @@ pub fn main() {
             }
         }
         Command::LimitSell { volume, pair, price } => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let mut oflags = BTreeSet::new();
             oflags.insert(OrderFlag::Post);
@@ -334,7 +371,11 @@ pub fn main() {
             }
         }
         Command::CancelOrder { id } => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let result = api.cancel_order(id).expect("api call failed");
             match block_on(result).expect("Failed to submit request") {
@@ -343,7 +384,11 @@ pub fn main() {
             }
         }
         Command::CancelAllOrders => {
-            let api = get_private_websockets_api(&config.creds);
+            let ws_config = get_private_ws_builder(&config.creds)
+                .subscribe_open_orders(true)
+                .build()
+                .unwrap();
+            let api = KrakenWsAPI::new(ws_config).expect("couldn't connect ws");
 
             let result = api.cancel_all_orders().expect("api call failed");
             match block_on(result).expect("Failed to submit request") {

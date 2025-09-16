@@ -1,6 +1,6 @@
 use super::{
     config::KrakenWsConfig,
-    messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, SubscriptionStatus, SystemStatus},
+    messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, OwnTrade, SubscriptionStatus, SystemStatus},
     types::{BookData, Candle, PublicTrade, SubscriptionType},
 };
 use futures::{
@@ -45,6 +45,8 @@ pub struct WsAPIResults {
     pub trades: HashMap<String, Mutex<Vec<PublicTrade>>>,
     /// Map order id -> open orders
     pub open_orders: Mutex<HashMap<String, OrderInfo>>,
+    /// List of our own trades
+    pub own_trades: Mutex<Vec<OwnTrade>>,
     /// Indicates that the stream is closed right now, and data may be stale.
     pub stream_closed: AtomicBool,
 }
@@ -146,16 +148,25 @@ impl KrakenWsClient {
             result.subscribe_ohlc(pair.to_string()).await?;
         }
 
-        if config.private.is_some() {
+        if let Some(private) = config.private.as_ref() {
             // TODO: In the future, check config.subscribe_open_orders, and only
             // subscribe to open_orders if desired by the user.
             //
             // However, right now this is the only thing you can subscribe to,
             // and kraken says they will close the private connection if you don't
             // subscribe to any private feed.
+            //
+            // NOTE: We could do this change now that we have ownTrades as well,
+            // but it would be a breaking change, so wait for another major bump.
             result.subscription_tracker.get_open_orders().last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
             result.subscribe_open_orders().await?;
+
+            if private.subscribe_own_trades {
+                result.subscription_tracker.get_own_trades().last_request =
+                    Some((SubscriptionStatus::Subscribed, Instant::now()));
+                result.subscribe_own_trades().await?;
+            }
         }
 
         Ok((result, stream, output))
@@ -237,6 +248,16 @@ impl KrakenWsClient {
             }
         }
 
+        {
+            let sub = self.subscription_tracker.get_own_trades();
+            if sub.status.is_subscribed() && sub.needs_unsubscribe && !sub.tried_to_change_recently() {
+                sub.last_request = Some((SubscriptionStatus::Unsubscribed, Instant::now()));
+                if let Err(err) = self.unsubscribe_own_trades().await {
+                    log::error!("Could not unsubscribe from own trades: {}", err);
+                }
+            }
+        }
+
         // Now look for things we are not subscribed to that we should be.
         // Check all the requested subscriptions
         for asset_pair in self.config.subscribe_book.clone() {
@@ -272,15 +293,28 @@ impl KrakenWsClient {
             }
         }
 
-        if let Some(private_config) = self.config.private.as_ref()
-            && private_config.subscribe_open_orders
-        {
-            let sub = self.subscription_tracker.get_open_orders();
-            if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
-                log::info!("Resubscribing to openOrders");
-                sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
-                if let Err(err) = self.subscribe_open_orders().await {
-                    log::error!("Could not subscribe to openOrders: {}", err);
+        if let Some(private_config) = self.config.private.clone() {
+            if private_config.subscribe_open_orders {
+                let sub = self.subscription_tracker.get_open_orders();
+
+                if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                    log::info!("Resubscribing to openOrders");
+                    sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                    if let Err(err) = self.subscribe_open_orders().await {
+                        log::error!("Could not subscribe to openOrders: {}", err);
+                    }
+                }
+            }
+
+            if private_config.subscribe_own_trades {
+                let sub = self.subscription_tracker.get_own_trades();
+
+                if !sub.status.is_subscribed() && !sub.tried_to_change_recently() {
+                    log::info!("Resubscribing to ownTrades");
+                    sub.last_request = Some((SubscriptionStatus::Subscribed, Instant::now()));
+                    if let Err(err) = self.subscribe_own_trades().await {
+                        log::error!("Could not subscribe to ownTrades: {}", err);
+                    }
                 }
             }
         }
@@ -529,7 +563,7 @@ impl KrakenWsClient {
         sink.send(Message::Text(payload.to_string().into())).await
     }
 
-    /// Subscribe to the openOrders strream
+    /// Subscribe to the openOrders stream
     async fn subscribe_open_orders(&mut self) -> Result<(), Error> {
         let private_config = self
             .config
@@ -546,7 +580,7 @@ impl KrakenWsClient {
         self.sink.send(Message::Text(payload.to_string().into())).await
     }
 
-    /// Unsubscribe from the openOrders strream
+    /// Unsubscribe from the openOrders stream
     async fn unsubscribe_open_orders(&mut self) -> Result<(), Error> {
         let private_config = self
             .config
@@ -557,6 +591,40 @@ impl KrakenWsClient {
             "event": "unsubscribe",
             "subscription": {
                 "name": "openOrders",
+                "token": private_config.token.clone(),
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string().into())).await
+    }
+
+    /// Subscribe to the ownTrades stream
+    async fn subscribe_own_trades(&mut self) -> Result<(), Error> {
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to own trades without a token, this is a logic error");
+        let payload = json!({
+            "event": "subscribe",
+            "subscription": {
+                "name": "ownTrades",
+                "token": private_config.token.clone(),
+            },
+        });
+        self.sink.send(Message::Text(payload.to_string().into())).await
+    }
+
+    /// Unsubscribe from the ownTrades stream
+    async fn unsubscribe_own_trades(&mut self) -> Result<(), Error> {
+        let private_config = self
+            .config
+            .private
+            .as_ref()
+            .expect("Can't subscribe to own trades without a token, this is a logic error");
+        let payload = json!({
+            "event": "unsubscribe",
+            "subscription": {
+                "name": "ownTrades",
                 "token": private_config.token.clone(),
             },
         });
@@ -733,13 +801,26 @@ impl KrakenWsClient {
                             log::warn!("Unexpected repeated {} message: {:?}", status, map);
                         }
                     }
+                    SubscriptionType::OwnTrades => {
+                        let sub = self.subscription_tracker.get_own_trades();
+                        if sub.status != status {
+                            *sub = SubscriptionState::new(status);
+                            if status.is_subscribed() {
+                                log::info!("Subscribed to {}", channel_name);
+                            } else {
+                                log::info!("Unsubscribed from {}", channel_name);
+                            }
+                        } else {
+                            log::warn!("Unexpected repeated {} message: {:?}", status, map);
+                        }
+                    }
                 }
             }
         }
         Ok(())
     }
 
-    fn handle_array(&mut self, array: Vec<Value>) -> Result<(), &'static str> {
+    fn handle_array(&mut self, mut array: Vec<Value>) -> Result<(), &'static str> {
         if array.len() < 2 {
             return Err("array too small");
         }
@@ -810,6 +891,49 @@ impl KrakenWsClient {
                         }
                     }
                 }
+            }
+            Ok(())
+        } else if channel_name == "ownTrades" {
+            // This is an ownTrades message. Check the sequence number
+            {
+                let sequence_number = array
+                    .last()
+                    .ok_or("index invalid")?
+                    .as_object()
+                    .ok_or("expected an object for sequence number")?
+                    .get("sequence")
+                    .ok_or("missing sequence number")?
+                    .as_u64()
+                    .ok_or("sequence number was not an integer")?;
+                self.subscription_tracker
+                    .get_own_trades()
+                    .check_sequence_number(sequence_number)?;
+            }
+            // The trades are the first array entry, and are presented as an array of maps
+            let Value::Array(trades_list) = array.remove(0) else {
+                return Err("trades were not an object");
+            };
+
+            // Collect the new trades into the output buffer
+            let mut own_trades = self.output.own_trades.lock().expect("mutex poisoned");
+            own_trades.reserve(trades_list.len());
+
+            for trade_map in trades_list {
+                // The trade is encoded as an object with one entry where the key is the trade id, and the value is another object with all the remaining data
+                let Value::Object(trade_obj) = trade_map else {
+                    return Err("trade was not encoded as an object");
+                };
+                if trade_obj.len() != 1 {
+                    return Err("trade object should have length 1");
+                }
+                let (key, value) = trade_obj.into_iter().next().unwrap();
+                let mut own_trade: OwnTrade = serde_json::from_value(value).map_err(|err| {
+                    log::error!("Could not parse own-trade object: {err}");
+                    "could not parse own trade object"
+                })?;
+                // Store the key as the trade id
+                own_trade.trade_id = key;
+                own_trades.push(own_trade);
             }
             Ok(())
         } else if channel_name == "trade" {
@@ -1164,6 +1288,8 @@ struct SubscriptionTracker {
     trade_subscriptions: HashMap<String, SubscriptionState>,
     /// Subscription state of the openOrders channel
     open_orders: SubscriptionState,
+    /// Subscription state of the ownTrades channel
+    own_trades: SubscriptionState,
 }
 
 impl SubscriptionTracker {
@@ -1197,6 +1323,10 @@ impl SubscriptionTracker {
 
     pub fn get_open_orders(&mut self) -> &mut SubscriptionState {
         &mut self.open_orders
+    }
+
+    pub fn get_own_trades(&mut self) -> &mut SubscriptionState {
+        &mut self.own_trades
     }
 }
 

@@ -214,6 +214,15 @@ impl KrakenWsAPI {
         self.output.open_orders.lock().expect("mutex poisoned").clone()
     }
 
+    /// Get latest ownTrades data
+    /// Note that each trade can only be retrieved once and is not delivered to the next consumer.
+    pub fn get_own_trades(&self) -> Vec<OwnTrade> {
+        let mut lk = self.output.own_trades.lock().expect("mutex poisoned");
+        let result = lk.clone();
+        lk.clear(); // note, this doesn't reduce the capacity
+        result
+    }
+
     /// Check if the stream is closed. If so then we should abandon this
     /// instance of KrakenWsAPI and create a new one in order to reconnect.
     ///

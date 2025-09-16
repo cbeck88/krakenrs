@@ -181,6 +181,8 @@ pub enum SubscriptionType {
     Book,
     /// openOrders
     OpenOrders,
+    /// ownTrades
+    OwnTrades,
     /// trade
     Trade,
     /// ohlc
@@ -193,6 +195,7 @@ impl FromStr for SubscriptionType {
         match src {
             "book" => Ok(SubscriptionType::Book),
             "openOrders" => Ok(SubscriptionType::OpenOrders),
+            "ownTrades" => Ok(SubscriptionType::OwnTrades),
             "trade" => Ok(SubscriptionType::Trade),
             "ohlc" => Ok(SubscriptionType::Ohlc),
             _ => Err("unknown subscription type"),

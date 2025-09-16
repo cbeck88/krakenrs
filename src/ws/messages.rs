@@ -324,3 +324,57 @@ where
     };
     text.serialize(ser)
 }
+
+/// A record of one of our own trades, from the ownTrades feed (websockets)
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OwnTrade {
+    /// the kraken unique id for this trade
+    // must allow defaulted, because kraken stores this as the key of this object rather than in the object
+    #[serde(default)]
+    pub trade_id: String,
+    /// the unique id for the order this trade corresponds to
+    pub ordertxid: String,
+    /// the asset pair the trade was made in
+    pub pair: String,
+    /// type of trade (buy/sell)
+    #[serde(rename = "type")]
+    pub bs_type: BsType,
+    /// type of order (market, limit etc.)
+    pub ordertype: OrderType,
+    /// time of the trade (unix timestamp)
+    pub time: Decimal,
+    /// average price of the trade
+    pub price: Decimal,
+    /// total volume of the trade (base currency quantity)
+    pub vol: Decimal,
+    /// total cost of the trade (quote currency quantity)
+    pub cost: Decimal,
+    /// total fees in the quote currency
+    pub fee: Decimal,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_own_trade_record() {
+        let json = r#"{
+        "cost": "1000000.00000",
+        "fee": "1600.00000",
+        "margin": "0.00000",
+        "ordertxid": "TDLH43-DVQXD-2KHVYY",
+        "ordertype": "limit",
+        "pair": "XBT/EUR",
+        "postxid": "OGTT3Y-C6I3P-XRI6HX",
+        "price": "100000.00000",
+        "time": "1560516023.070651",
+        "type": "sell",
+        "vol": "1000000000.00000000"
+      }"#;
+        let val: OwnTrade = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(val.pair, "XBT/EUR");
+        assert_eq!(val.bs_type, BsType::Sell);
+    }
+}

@@ -62,10 +62,6 @@ pub struct KrakenWsClient {
     output: Arc<WsAPIResults>,
     /// Track subscription statuses of different channels
     subscription_tracker: SubscriptionTracker,
-    /// Tracks sequence number of the openOrders subscription
-    /// This is Some if we are subscribed, and contains the current sequence number
-    /// It is None if we are unsubscribed or there was an error
-    open_orders_sequence_number: Option<u64>,
     /// Result senders for add_order calls
     add_order_result_senders: HashMap<u64, oneshot::Sender<Result<String, String>>>,
     /// Result senders for cancel_order calls
@@ -124,7 +120,6 @@ impl KrakenWsClient {
             sink,
             output: output.clone(),
             subscription_tracker: Default::default(),
-            open_orders_sequence_number: None,
             add_order_result_senders: Default::default(),
             cancel_order_result_senders: Default::default(),
             cancel_all_orders_result_senders: Default::default(),
@@ -731,10 +726,8 @@ impl KrakenWsClient {
                             *sub = SubscriptionState::new(status);
                             if status.is_subscribed() {
                                 log::info!("Subscribed to {}", channel_name);
-                                self.open_orders_sequence_number = Some(0);
                             } else {
                                 log::info!("Unsubscribed from {}", channel_name);
-                                self.open_orders_sequence_number = None;
                             }
                         } else {
                             log::warn!("Unexpected repeated {} message: {:?}", status, map);
@@ -768,16 +761,9 @@ impl KrakenWsClient {
                     .ok_or("missing sequence number")?
                     .as_u64()
                     .ok_or("sequence number was not an integer")?;
-                let our_seq_number = self
-                    .open_orders_sequence_number
-                    .as_mut()
-                    .ok_or("unexpected openOrders message")?;
-                if *our_seq_number + 1 != sequence_number {
-                    // We need to try to resubscribe to open orders now
-                    self.subscription_tracker.get_open_orders().needs_unsubscribe = true;
-                    return Err("openOrders sequence number mismatch");
-                }
-                *our_seq_number += 1;
+                self.subscription_tracker
+                    .get_open_orders()
+                    .check_sequence_number(sequence_number)?;
             }
             // Apply the updates
             let mut open_orders = self.output.open_orders.lock().expect("mutex poisoned");
@@ -1223,14 +1209,38 @@ struct SubscriptionState {
     /// A note to ourselves that we intend to unsubscribe and resubscribe due
     /// to an error that we detected
     needs_unsubscribe: bool,
+    /// A sequence number, for those subscriptions that use it.
+    /// Starts at 0 when status is subscribed, None when unsubscribed.
+    /// Only user-data subscriptions, like openOrders and ownTrades, carry sequence numbers.
+    /// When the numbers don't increment from 1, it indicates that we missed a message somehow,
+    /// and we should resubscribe, or reconnect.
+    sequence_number: Option<u64>,
 }
 
 impl SubscriptionState {
+    /// Create a new subscription state with the given status flag
     pub fn new(status: SubscriptionStatus) -> Self {
         Self {
             status,
-            ..Default::default()
+            last_request: None,
+            needs_unsubscribe: false,
+            sequence_number: if status.is_subscribed() { Some(0) } else { None },
         }
+    }
+
+    /// Check a sequence number against what we have recorded in the tracker
+    pub fn check_sequence_number(&mut self, new_sequence_number: u64) -> Result<(), &'static str> {
+        let Some(expected_sequence_number) = self.sequence_number.as_mut() else {
+            return Err("unexpected message (no sequence number expected for this channel right now)");
+        };
+
+        if *expected_sequence_number + 1 != new_sequence_number {
+            // We need to try to resubscribe to this channel now
+            self.needs_unsubscribe = true;
+            return Err("sequence number mismatch");
+        }
+        *expected_sequence_number += 1;
+        Ok(())
     }
 
     /// Check if we tried to change the status "recently" meaning within

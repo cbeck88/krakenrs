@@ -183,7 +183,7 @@ impl KrakenRestAPI {
     /// (Private) Get trade volume and fee tier info, per asset pair
     pub fn get_trade_volume(&self, asset_pairs: Vec<String>) -> Result<GetTradeVolumeResponse> {
         let result: Result<KrakenResult<GetTradeVolumeResponse>> = self.client.query_private(
-            "GetTradeVolume",
+            "TradeVolume",
             GetTradeVolumeRequest {
                 pair: asset_pairs.join(","),
             },

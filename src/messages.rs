@@ -405,6 +405,15 @@ pub struct GetOpenOrdersResponse {
     pub open: HashMap<TxId, OrderInfo>,
 }
 
+/// Query orders request schema
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct QueryOrdersRequest {
+    pub txid: String,
+}
+
+/// Query orders response schema, keyed by tx id
+pub type QueryOrdersResponse = HashMap<String, OrderInfo>;
+
 /// Cancel order request
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct CancelOrderRequest {

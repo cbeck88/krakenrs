@@ -54,6 +54,8 @@ enum Command {
     GetTradeVolume { pairs: Vec<String> },
     /// Get websockets token
     GetWebSocketsToken,
+    /// Query specific orders by order id
+    QueryOrders { order_ids: Vec<String> },
     /// Get open orders list
     GetOpenOrders,
     /// Cancel order: {id}
@@ -183,6 +185,10 @@ fn main() {
         }
         Command::GetWebSocketsToken => {
             let result = api.get_websockets_token().expect("api call failed");
+            log_value(&result);
+        }
+        Command::QueryOrders { order_ids } => {
+            let result = api.query_orders(order_ids).expect("api call failed");
             log_value(&result);
         }
         Command::GetOpenOrders => {

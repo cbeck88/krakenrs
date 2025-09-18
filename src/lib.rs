@@ -16,15 +16,15 @@ pub use kraken_rest_client::*;
 mod messages;
 use messages::{
     AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty, GetOHLCDataRequest,
-    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, TickerRequest,
-    unpack_kraken_result,
+    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, QueryOrdersRequest,
+    TickerRequest, unpack_kraken_result,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
     BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, FeeTierInfo,
     GetOHLCDataResponse, GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse,
-    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, SystemStatusResponse,
-    TickerResponse, TimeResponse, TxId, UserRefId,
+    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, QueryOrdersResponse,
+    SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
 };
 
 use core::convert::TryFrom;
@@ -195,6 +195,17 @@ impl KrakenRestAPI {
     pub fn get_websockets_token(&self) -> Result<GetWebSocketsTokenResponse> {
         let result: Result<KrakenResult<GetWebSocketsTokenResponse>> =
             self.client.query_private("GetWebSocketsToken", Empty {});
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Query orders by order id
+    pub fn query_orders(&self, order_ids: Vec<String>) -> Result<QueryOrdersResponse> {
+        let result: Result<KrakenResult<QueryOrdersResponse>> = self.client.query_private(
+            "QueryOrders",
+            QueryOrdersRequest {
+                txid: order_ids.join(","),
+            },
+        );
         result.and_then(unpack_kraken_result)
     }
 

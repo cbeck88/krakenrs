@@ -203,12 +203,19 @@ pub struct Candle {
     /// The timestamp of the candle (seconds since the unix epoch)
     #[serde(deserialize_with = "rust_decimal::serde::arbitrary_precision::deserialize")]
     pub timestamp: Decimal,
+    /// The price at the open of the candle period
     pub open: Decimal,
+    /// The highest price during the candle period
     pub high: Decimal,
+    /// The lowest price during the candle period
     pub low: Decimal,
+    /// The price at the end of the candle period
     pub close: Decimal,
+    /// The volume-weighted average price during the candle period
     pub vwap: Decimal,
+    /// The volume during the candle period
     pub volume: Decimal,
+    /// The total number of trades during the candle period
     pub trades: usize,
 }
 

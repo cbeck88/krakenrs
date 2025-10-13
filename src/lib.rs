@@ -21,7 +21,7 @@ use messages::{
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
-    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, FeeTierInfo,
+    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, Candle, FeeTierInfo,
     GetOHLCDataResponse, GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse,
     GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, QueryOrdersResponse,
     SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,

@@ -128,7 +128,7 @@ pub struct TickerRequest {
 }
 
 /// (Substructure within) Result of kraken public "Ticker" API call
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AssetTickerInfo {
     /// Ask `[price, whole lot volume, lot volume]`
     pub a: Vec<String>,
@@ -180,7 +180,7 @@ pub struct PublicTrade {
 }
 
 /// A query object to kraken public "Get OHLC Data" API call
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct GetOHLCDataRequest {
     /// An asset pair
     pub pair: String,
@@ -197,7 +197,7 @@ pub struct GetOHLCDataRequest {
 pub type GetOHLCDataResponse = LastAndData<Vec<Candle>>;
 
 /// A sub-object of the OHLC data response
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(expecting = "expecting [<timestamp>, <open>, <high>, <low>, <close>, <vwap>, <volume>, <trades>] array")]
 pub struct Candle {
     /// The timestamp of the candle (seconds since the unix epoch)

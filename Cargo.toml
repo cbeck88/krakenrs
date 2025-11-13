@@ -1,6 +1,6 @@
 [package]
 name = "krakenrs"
-version = "6.4.0"
+version = "6.4.1"
 authors = ["Chris Beck <beck.ct@gmail.com>"]
 edition = "2024"
 readme = "README.md"

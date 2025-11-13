@@ -765,6 +765,30 @@ pub struct WithdrawResponse {
     pub refid: String,
 }
 
+/// Request for WithdrawInfo private API call
+#[derive(Debug, Serialize)]
+pub struct WithdrawInfoRequest {
+    /// Asset being withdrawn
+    pub asset: String,
+    /// Withdrawal key name, as set up on your account
+    pub key: String,
+    /// Amount to withdraw
+    pub amount: Decimal,
+}
+
+/// Response from WithdrawInfo private API call
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WithdrawInfoResponse {
+    /// Withdrawal method name
+    pub method: String,
+    /// Maximum amount that can be withdrawn (same as requested amount)
+    pub limit: Decimal,
+    /// Net amount that will be received after fees
+    pub amount: Decimal,
+    /// Withdrawal fee charged
+    pub fee: Decimal,
+}
+
 /// Request for WithdrawAddresses private API call
 #[derive(Debug, Serialize)]
 pub struct WithdrawAddressesRequest {

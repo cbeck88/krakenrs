@@ -26,8 +26,8 @@ pub use messages::{
     DepositStatusRequest, DepositStatusResponse, FeeTierInfo, GetOHLCDataResponse, GetOpenOrdersResponse,
     GetRecentTradesResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
     OrderStatus, OrderType, QueryOrdersResponse, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
-    WithdrawAddress, WithdrawAddressesResponse, WithdrawRequest, WithdrawResponse, WithdrawStatusRequest,
-    WithdrawStatusResponse, WithdrawalStatus,
+    WithdrawAddress, WithdrawAddressesResponse, WithdrawInfoRequest, WithdrawInfoResponse, WithdrawRequest,
+    WithdrawResponse, WithdrawStatusRequest, WithdrawStatusResponse, WithdrawalStatus,
 };
 
 use core::convert::TryFrom;
@@ -351,6 +351,12 @@ impl KrakenRestAPI {
     /// (Private) Withdraw funds
     pub fn withdraw(&self, request: WithdrawRequest) -> Result<WithdrawResponse> {
         let result: Result<KrakenResult<WithdrawResponse>> = self.client.query_private("Withdraw", request);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get withdrawal fee information
+    pub fn get_withdraw_info(&self, request: WithdrawInfoRequest) -> Result<WithdrawInfoResponse> {
+        let result: Result<KrakenResult<WithdrawInfoResponse>> = self.client.query_private("WithdrawInfo", request);
         result.and_then(unpack_kraken_result)
     }
 

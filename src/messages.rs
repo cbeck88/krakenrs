@@ -603,4 +603,359 @@ mod tests {
         assert_eq!(obj.data.len(), 9);
         assert_eq!(obj.last, "1756923300");
     }
+
+    #[test]
+    fn test_deposit_method_deserialize_limit_false() {
+        // Test that limit: false deserializes to None
+        let text = r#"{
+            "method": "Bitcoin",
+            "limit": false,
+            "fee": "0.00",
+            "gen-address": true,
+            "minimum": "0.0001"
+        }"#;
+
+        let method: DepositMethod = serde_json::from_str(text).unwrap();
+        assert_eq!(method.method, "Bitcoin");
+        assert_eq!(method.limit, None);
+        assert_eq!(method.fee, Some("0.00".to_string()));
+        assert_eq!(method.gen_address, Some(true));
+        assert_eq!(method.minimum, Some("0.0001".to_string()));
+    }
+
+    #[test]
+    fn test_deposit_method_deserialize_limit_string() {
+        // Test that limit: "100.0" deserializes to Some("100.0")
+        let text = r#"{
+            "method": "Bitcoin",
+            "limit": "100.0",
+            "fee": "0.00",
+            "gen-address": true,
+            "minimum": "0.0001"
+        }"#;
+
+        let method: DepositMethod = serde_json::from_str(text).unwrap();
+        assert_eq!(method.method, "Bitcoin");
+        assert_eq!(method.limit, Some("100.0".to_string()));
+        assert_eq!(method.fee, Some("0.00".to_string()));
+    }
+
+    #[test]
+    fn test_deposit_methods_response() {
+        // Test deserializing the full response from the actual error message
+        let text = r#"[
+            {"method":"Bitcoin","limit":false,"fee":"0.00","gen-address":true,"minimum":"0.0001"},
+            {"method":"Bitcoin Lightning","limit":false,"fee":"0.00","minimum":"0.00001"},
+            {"method":"kBTC - Ink (Unified)","limit":false,"fee":"0.0","gen-address":true,"minimum":"0.00026"},
+            {"method":"Test with limit","limit":"50.5","fee":"0.01","minimum":"0.001"}
+        ]"#;
+
+        let methods: DepositMethodsResponse = serde_json::from_str(text).unwrap();
+        assert_eq!(methods.len(), 4);
+
+        // Check first method (Bitcoin with limit: false)
+        assert_eq!(methods[0].method, "Bitcoin");
+        assert_eq!(methods[0].limit, None);
+        assert_eq!(methods[0].fee, Some("0.00".to_string()));
+        assert_eq!(methods[0].gen_address, Some(true));
+        assert_eq!(methods[0].minimum, Some("0.0001".to_string()));
+
+        // Check last method (with string limit)
+        assert_eq!(methods[3].method, "Test with limit");
+        assert_eq!(methods[3].limit, Some("50.5".to_string()));
+        assert_eq!(methods[3].fee, Some("0.01".to_string()));
+    }
+}
+
+// Funding endpoints
+
+/// Request for DepositMethods private API call
+#[derive(Debug, Serialize)]
+pub struct DepositMethodsRequest {
+    /// Asset being deposited
+    pub asset: String,
+}
+
+/// Information about a deposit method
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepositMethod {
+    /// Name of deposit method
+    pub method: String,
+    /// Maximum net amount that can be deposited right now, or None if no limit
+    #[serde(deserialize_with = "deserialize_limit", default)]
+    pub limit: Option<String>,
+    /// Amount of fees that will be paid
+    #[serde(default)]
+    pub fee: Option<String>,
+    /// Whether or not method has an address setup fee
+    #[serde(rename = "address-setup-fee", default)]
+    pub address_setup_fee: Option<String>,
+    /// Whether new addresses can be generated for this method
+    #[serde(rename = "gen-address", default)]
+    pub gen_address: Option<bool>,
+    /// Minimum amount for this deposit method
+    #[serde(default)]
+    pub minimum: Option<String>,
+}
+
+/// Response from DepositMethods private API call
+pub type DepositMethodsResponse = Vec<DepositMethod>;
+
+/// Request for DepositAddresses private API call
+#[derive(Debug, Serialize, Default)]
+pub struct DepositAddressesRequest {
+    /// Asset being deposited
+    pub asset: String,
+    /// Name of the deposit method
+    pub method: String,
+    /// Whether or not to generate a new address (default: false)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new: Option<bool>,
+    /// Amount you wish to deposit (only required for method=Bitcoin Lightning)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
+}
+
+/// Information about a deposit address
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepositAddress {
+    /// Deposit address
+    pub address: String,
+    /// Expiration time in unix timestamp, or 0 if not expiring
+    #[serde(
+        deserialize_with = "deserialize_string_to_u64",
+        serialize_with = "serialize_u64_to_string"
+    )]
+    pub expiretm: u64,
+    /// Whether or not address has ever been used
+    #[serde(default)]
+    pub new: bool,
+    /// Tag/memo for the address (optional, for currencies that require it)
+    #[serde(default)]
+    pub memo: Option<String>,
+    /// Tag/memo for the address (optional, for currencies that require it)
+    #[serde(default)]
+    pub tag: Option<String>,
+}
+
+/// Response from DepositAddresses private API call
+pub type DepositAddressesResponse = Vec<DepositAddress>;
+
+/// Request for Withdraw private API call
+#[derive(Debug, Serialize, Default)]
+pub struct WithdrawRequest {
+    /// Asset being withdrawn
+    pub asset: String,
+    /// Withdrawal key name, as set up on your account
+    pub key: String,
+    /// Amount to withdraw, including fees
+    pub amount: String,
+    /// Optional, crypto address that can be used to confirm address matches key (will return an error if it doesn't match)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// Optional, if the exchange rate is above this, the withdrawal will fail (protect against price movements)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_fee: Option<String>,
+}
+
+/// Response from Withdraw private API call
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WithdrawResponse {
+    /// Reference id for the withdrawal
+    pub refid: String,
+}
+
+/// Request for WithdrawAddresses private API call
+#[derive(Debug, Serialize)]
+pub struct WithdrawAddressesRequest {
+    /// Optional asset class to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aclass: Option<String>,
+    /// Optional asset to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
+    /// Optional withdrawal method to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+}
+
+/// Information about a withdrawal address
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WithdrawAddress {
+    /// Withdrawal address (not present for fiat bank accounts)
+    #[serde(default)]
+    pub address: Option<String>,
+    /// Name of asset being withdrawn
+    pub asset: String,
+    /// Name of the withdrawal method
+    pub method: String,
+    /// Withdrawal key name, as set up on your account
+    pub key: String,
+    /// Contains tags for XRP deposit addresses and memos for STX, XLM, and EOS deposit addresses
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Verification status of withdrawal address
+    pub verified: bool,
+}
+
+/// Response from WithdrawAddresses private API call
+pub type WithdrawAddressesResponse = Vec<WithdrawAddress>;
+
+/// Request for WithdrawStatus private API call
+#[derive(Debug, Serialize, Default)]
+pub struct WithdrawStatusRequest {
+    /// Optional asset to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
+    /// Optional withdrawal method to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Optional start timestamp (unix time) for filtering
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    /// Optional end timestamp (unix time) for filtering
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    /// Optional cursor for pagination
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Optional limit for number of results (default 500)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+}
+
+/// Information about a withdrawal's status
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WithdrawalStatus {
+    /// Withdrawal method name
+    pub method: String,
+    /// Asset class
+    #[serde(default)]
+    pub aclass: Option<String>,
+    /// Asset identifier
+    pub asset: String,
+    /// Reference ID for the withdrawal
+    pub refid: String,
+    /// Transaction ID (null until settled)
+    #[serde(default)]
+    pub txid: Option<String>,
+    /// Withdrawal destination (address or bank info)
+    pub info: String,
+    /// Withdrawal amount
+    pub amount: String,
+    /// Withdrawal fee
+    pub fee: String,
+    /// Unix timestamp of withdrawal request
+    pub time: u64,
+    /// Current status of the withdrawal
+    pub status: String,
+    /// Withdrawal key name
+    #[serde(default)]
+    pub key: Option<String>,
+    /// Network name
+    #[serde(default)]
+    pub network: Option<String>,
+}
+
+/// Response from WithdrawStatus private API call
+pub type WithdrawStatusResponse = Vec<WithdrawalStatus>;
+
+/// Request for DepositStatus private API call
+#[derive(Debug, Serialize, Default)]
+pub struct DepositStatusRequest {
+    /// Optional asset to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
+    /// Optional deposit method to filter by
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Optional start timestamp (unix time) for filtering
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start: Option<String>,
+    /// Optional end timestamp (unix time) for filtering
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    /// Optional cursor for pagination
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Optional limit for number of results (default 500)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// Whether to include originators field in response
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub originators: Option<bool>,
+}
+
+/// Information about a deposit's status
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DepositStatus {
+    /// Deposit method name
+    pub method: String,
+    /// Asset class
+    #[serde(default)]
+    pub aclass: Option<String>,
+    /// Asset identifier
+    pub asset: String,
+    /// Reference ID for the deposit
+    pub refid: String,
+    /// Method transaction ID (blockchain transaction hash)
+    #[serde(default)]
+    pub txid: Option<String>,
+    /// Method transaction information (typically the deposit address)
+    pub info: String,
+    /// Deposit amount
+    pub amount: String,
+    /// Deposit fee
+    pub fee: String,
+    /// Unix timestamp of deposit request
+    pub time: u64,
+    /// Current status of the deposit
+    pub status: String,
+    /// For ERC20 network deposits, contains original transaction IDs
+    #[serde(default)]
+    pub originators: Option<Vec<String>>,
+    /// Additional status property (e.g., "on-hold", "canceled")
+    #[serde(rename = "status-prop", default)]
+    pub status_prop: Option<String>,
+}
+
+/// Response from DepositStatus private API call
+pub type DepositStatusResponse = Vec<DepositStatus>;
+
+// Helper deserializer for limit field which can be either false (boolean) or a string
+fn deserialize_limit<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Unexpected};
+    use serde_json::Value;
+
+    let value = Value::deserialize(deserializer)?;
+    match value {
+        Value::Bool(false) => Ok(None),
+        Value::String(s) => Ok(Some(s)),
+        Value::Bool(true) => Err(Error::invalid_value(Unexpected::Bool(true), &"false or a string")),
+        _ => Err(Error::invalid_type(
+            Unexpected::Other(&format!("{:?}", value)),
+            &"false or a string",
+        )),
+    }
+}
+
+// Helper deserializer for string to u64
+fn deserialize_string_to_u64<'de, D>(deserializer: D) -> std::result::Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let s = String::deserialize(deserializer)?;
+    u64::from_str(&s).map_err(|e| Error::custom(format!("Failed to parse u64: {}", e)))
+}
+
+// Helper serializer for u64 to string
+fn serialize_u64_to_string<S>(value: &u64, serializer: S) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&value.to_string())
 }

@@ -80,6 +80,86 @@ enum Command {
         pair: String,
         price: String,
     },
+    /// Get deposit methods for asset: {asset}
+    GetDepositMethods { asset: String },
+    /// Get deposit addresses for asset and method: {asset} {method}
+    GetDepositAddresses {
+        asset: String,
+        method: String,
+        /// Generate a new address
+        #[structopt(long)]
+        new: bool,
+        /// Amount to deposit (required for Bitcoin Lightning)
+        #[structopt(long)]
+        amount: Option<String>,
+    },
+    /// Get withdrawal addresses
+    GetWithdrawalAddresses {
+        /// Optional asset to filter by
+        #[structopt(long)]
+        asset: Option<String>,
+        /// Optional method to filter by
+        #[structopt(long)]
+        method: Option<String>,
+    },
+    /// Withdraw funds: {asset} {key} {amount}
+    Withdraw {
+        asset: String,
+        /// Withdrawal key name (as configured in your Kraken account)
+        key: String,
+        amount: String,
+        /// Optional address to verify against key
+        #[structopt(long)]
+        address: Option<String>,
+        /// Optional maximum fee
+        #[structopt(long)]
+        max_fee: Option<String>,
+    },
+    /// Get status of recent withdrawals
+    GetWithdrawStatus {
+        /// Optional asset to filter by
+        #[structopt(long)]
+        asset: Option<String>,
+        /// Optional method to filter by
+        #[structopt(long)]
+        method: Option<String>,
+        /// Optional start timestamp (unix time) for filtering
+        #[structopt(long)]
+        start: Option<String>,
+        /// Optional end timestamp (unix time) for filtering
+        #[structopt(long)]
+        end: Option<String>,
+        /// Optional cursor for pagination
+        #[structopt(long)]
+        cursor: Option<String>,
+        /// Optional limit for number of results (default 500)
+        #[structopt(long)]
+        limit: Option<u32>,
+    },
+    /// Get status of recent deposits
+    GetDepositStatus {
+        /// Optional asset to filter by
+        #[structopt(long)]
+        asset: Option<String>,
+        /// Optional method to filter by
+        #[structopt(long)]
+        method: Option<String>,
+        /// Optional start timestamp (unix time) for filtering
+        #[structopt(long)]
+        start: Option<String>,
+        /// Optional end timestamp (unix time) for filtering
+        #[structopt(long)]
+        end: Option<String>,
+        /// Optional cursor for pagination
+        #[structopt(long)]
+        cursor: Option<String>,
+        /// Optional limit for number of results (default 500)
+        #[structopt(long)]
+        limit: Option<u32>,
+        /// Whether to include originators field in response
+        #[structopt(long)]
+        originators: bool,
+    },
 }
 
 /// Logs a "pretty printed" json structure on stdout
@@ -271,6 +351,94 @@ fn main() {
                     None,
                     config.validate,
                 )
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::GetDepositMethods { asset } => {
+            let result = api.get_deposit_methods(asset).expect("api call failed");
+            log_value(&result);
+        }
+        Command::GetDepositAddresses {
+            asset,
+            method,
+            new,
+            amount,
+        } => {
+            use krakenrs::DepositAddressesRequest;
+            let result = api
+                .get_deposit_addresses(DepositAddressesRequest {
+                    asset,
+                    method,
+                    new: if new { Some(true) } else { None },
+                    amount,
+                })
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::GetWithdrawalAddresses { asset, method } => {
+            let result = api.get_withdrawal_addresses(asset, method).expect("api call failed");
+            log_value(&result);
+        }
+        Command::Withdraw {
+            asset,
+            key,
+            amount,
+            address,
+            max_fee,
+        } => {
+            use krakenrs::WithdrawRequest;
+            let result = api
+                .withdraw(WithdrawRequest {
+                    asset,
+                    key,
+                    amount,
+                    address,
+                    max_fee,
+                })
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::GetWithdrawStatus {
+            asset,
+            method,
+            start,
+            end,
+            cursor,
+            limit,
+        } => {
+            use krakenrs::WithdrawStatusRequest;
+            let result = api
+                .get_withdraw_status(WithdrawStatusRequest {
+                    asset,
+                    method,
+                    start,
+                    end,
+                    cursor,
+                    limit,
+                })
+                .expect("api call failed");
+            log_value(&result);
+        }
+        Command::GetDepositStatus {
+            asset,
+            method,
+            start,
+            end,
+            cursor,
+            limit,
+            originators,
+        } => {
+            use krakenrs::DepositStatusRequest;
+            let result = api
+                .get_deposit_status(DepositStatusRequest {
+                    asset,
+                    method,
+                    start,
+                    end,
+                    cursor,
+                    limit,
+                    originators: if originators { Some(true) } else { None },
+                })
                 .expect("api call failed");
             log_value(&result);
         }

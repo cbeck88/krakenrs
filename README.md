@@ -168,6 +168,16 @@ Usage:
 - Private APIs are invoked for example like:
   `cargo run --example kraken path/to/creds get-open-orders`
   `cargo run --example kraken path/to/creds --validate market-buy 0.02 AAVEUSD`
+- Funding APIs (deposits and withdrawals):
+  `cargo run --example kraken path/to/creds get-deposit-methods BTC`
+  `cargo run --example kraken path/to/creds get-deposit-addresses BTC Bitcoin`
+  `cargo run --example kraken path/to/creds get-deposit-status`
+  `cargo run --example kraken path/to/creds get-deposit-status --asset ETH --limit 10`
+  `cargo run --example kraken path/to/creds get-withdrawal-addresses`
+  `cargo run --example kraken path/to/creds get-withdrawal-addresses --asset BTC`
+  `cargo run --example kraken path/to/creds withdraw BTC my_btc_wallet 0.01`
+  `cargo run --example kraken path/to/creds get-withdraw-status`
+  `cargo run --example kraken path/to/creds get-withdraw-status --asset ETH --limit 10`
 
 Websockets Feed Demo
 --------------------

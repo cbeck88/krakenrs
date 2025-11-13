@@ -15,16 +15,19 @@ pub use kraken_rest_client::*;
 
 mod messages;
 use messages::{
-    AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, Empty, GetOHLCDataRequest,
-    GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult, QueryOrdersRequest,
-    TickerRequest, unpack_kraken_result,
+    AddOrderRequest, AssetPairsRequest, CancelAllOrdersAfterRequest, CancelOrderRequest, DepositMethodsRequest, Empty,
+    GetOHLCDataRequest, GetOpenOrdersRequest, GetRecentTradesRequest, GetTradeVolumeRequest, KrakenResult,
+    QueryOrdersRequest, TickerRequest, WithdrawAddressesRequest, unpack_kraken_result,
 };
 pub use messages::{
     AddOrderResponse, AssetInfo, AssetPair, AssetPairsResponse, AssetTickerInfo, AssetsResponse, BalanceResponse,
-    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, Candle, FeeTierInfo,
-    GetOHLCDataResponse, GetOpenOrdersResponse, GetRecentTradesResponse, GetTradeVolumeResponse,
-    GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo, OrderStatus, OrderType, QueryOrdersResponse,
-    SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    BsType, CancelAllOrdersAfterResponse, CancelAllOrdersResponse, CancelOrderResponse, Candle, DepositAddress,
+    DepositAddressesRequest, DepositAddressesResponse, DepositMethod, DepositMethodsResponse, DepositStatus,
+    DepositStatusRequest, DepositStatusResponse, FeeTierInfo, GetOHLCDataResponse, GetOpenOrdersResponse,
+    GetRecentTradesResponse, GetTradeVolumeResponse, GetWebSocketsTokenResponse, OrderAdded, OrderFlag, OrderInfo,
+    OrderStatus, OrderType, QueryOrdersResponse, SystemStatusResponse, TickerResponse, TimeResponse, TxId, UserRefId,
+    WithdrawAddress, WithdrawAddressesResponse, WithdrawRequest, WithdrawResponse, WithdrawStatusRequest,
+    WithdrawStatusResponse, WithdrawalStatus,
 };
 
 use core::convert::TryFrom;
@@ -297,6 +300,63 @@ impl KrakenRestAPI {
             validate,
         };
         let result: Result<KrakenResult<AddOrderResponse>> = self.client.query_private("AddOrder", req);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get deposit methods for an asset
+    ///
+    /// Arguments:
+    /// * asset: Asset name to get deposit methods for (e.g. "BTC")
+    pub fn get_deposit_methods(&self, asset: String) -> Result<DepositMethodsResponse> {
+        let result: Result<KrakenResult<DepositMethodsResponse>> = self
+            .client
+            .query_private("DepositMethods", DepositMethodsRequest { asset });
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get deposit addresses for an asset and method
+    pub fn get_deposit_addresses(&self, request: DepositAddressesRequest) -> Result<DepositAddressesResponse> {
+        let result: Result<KrakenResult<DepositAddressesResponse>> =
+            self.client.query_private("DepositAddresses", request);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get status of recent deposits
+    pub fn get_deposit_status(&self, request: DepositStatusRequest) -> Result<DepositStatusResponse> {
+        let result: Result<KrakenResult<DepositStatusResponse>> = self.client.query_private("DepositStatus", request);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get withdrawal addresses
+    ///
+    /// Arguments:
+    /// * asset: Optional asset to filter by (e.g. "BTC")
+    /// * method: Optional withdrawal method to filter by
+    pub fn get_withdrawal_addresses(
+        &self,
+        asset: Option<String>,
+        method: Option<String>,
+    ) -> Result<WithdrawAddressesResponse> {
+        let result: Result<KrakenResult<WithdrawAddressesResponse>> = self.client.query_private(
+            "WithdrawAddresses",
+            WithdrawAddressesRequest {
+                aclass: None,
+                asset,
+                method,
+            },
+        );
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Withdraw funds
+    pub fn withdraw(&self, request: WithdrawRequest) -> Result<WithdrawResponse> {
+        let result: Result<KrakenResult<WithdrawResponse>> = self.client.query_private("Withdraw", request);
+        result.and_then(unpack_kraken_result)
+    }
+
+    /// (Private) Get status of recent withdrawals
+    pub fn get_withdraw_status(&self, request: WithdrawStatusRequest) -> Result<WithdrawStatusResponse> {
+        let result: Result<KrakenResult<WithdrawStatusResponse>> = self.client.query_private("WithdrawStatus", request);
         result.and_then(unpack_kraken_result)
     }
 }

@@ -840,7 +840,8 @@ pub struct WithdrawalStatus {
     #[serde(default)]
     pub txid: Option<String>,
     /// Withdrawal destination (address or bank info)
-    pub info: String,
+    #[serde(default)]
+    pub info: Option<String>,
     /// Withdrawal amount
     pub amount: String,
     /// Withdrawal fee
@@ -902,7 +903,8 @@ pub struct DepositStatus {
     #[serde(default)]
     pub txid: Option<String>,
     /// Method transaction information (typically the deposit address)
-    pub info: String,
+    #[serde(default)]
+    pub info: Option<String>,
     /// Deposit amount
     pub amount: String,
     /// Deposit fee

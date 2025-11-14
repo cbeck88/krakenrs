@@ -618,9 +618,9 @@ mod tests {
         let method: DepositMethod = serde_json::from_str(text).unwrap();
         assert_eq!(method.method, "Bitcoin");
         assert_eq!(method.limit, None);
-        assert_eq!(method.fee, Some("0.00".to_string()));
+        assert_eq!(method.fee, Some(Decimal::from_str("0.00").unwrap()));
         assert_eq!(method.gen_address, Some(true));
-        assert_eq!(method.minimum, Some("0.0001".to_string()));
+        assert_eq!(method.minimum, Some(Decimal::from_str("0.0001").unwrap()));
     }
 
     #[test]
@@ -636,8 +636,8 @@ mod tests {
 
         let method: DepositMethod = serde_json::from_str(text).unwrap();
         assert_eq!(method.method, "Bitcoin");
-        assert_eq!(method.limit, Some("100.0".to_string()));
-        assert_eq!(method.fee, Some("0.00".to_string()));
+        assert_eq!(method.limit, Some(Decimal::from_str("100.0").unwrap()));
+        assert_eq!(method.fee, Some(Decimal::from_str("0.00").unwrap()));
     }
 
     #[test]
@@ -656,14 +656,14 @@ mod tests {
         // Check first method (Bitcoin with limit: false)
         assert_eq!(methods[0].method, "Bitcoin");
         assert_eq!(methods[0].limit, None);
-        assert_eq!(methods[0].fee, Some("0.00".to_string()));
+        assert_eq!(methods[0].fee, Some(Decimal::from_str("0.00").unwrap()));
         assert_eq!(methods[0].gen_address, Some(true));
-        assert_eq!(methods[0].minimum, Some("0.0001".to_string()));
+        assert_eq!(methods[0].minimum, Some(Decimal::from_str("0.0001").unwrap()));
 
         // Check last method (with string limit)
         assert_eq!(methods[3].method, "Test with limit");
-        assert_eq!(methods[3].limit, Some("50.5".to_string()));
-        assert_eq!(methods[3].fee, Some("0.01".to_string()));
+        assert_eq!(methods[3].limit, Some(Decimal::from_str("50.5").unwrap()));
+        assert_eq!(methods[3].fee, Some(Decimal::from_str("0.01").unwrap()));
     }
 }
 
@@ -683,19 +683,19 @@ pub struct DepositMethod {
     pub method: String,
     /// Maximum net amount that can be deposited right now, or None if no limit
     #[serde(deserialize_with = "deserialize_limit", default)]
-    pub limit: Option<String>,
+    pub limit: Option<Decimal>,
     /// Amount of fees that will be paid
     #[serde(default)]
-    pub fee: Option<String>,
+    pub fee: Option<Decimal>,
     /// Whether or not method has an address setup fee
     #[serde(rename = "address-setup-fee", default)]
-    pub address_setup_fee: Option<String>,
+    pub address_setup_fee: Option<Decimal>,
     /// Whether new addresses can be generated for this method
     #[serde(rename = "gen-address", default)]
     pub gen_address: Option<bool>,
     /// Minimum amount for this deposit method
     #[serde(default)]
-    pub minimum: Option<String>,
+    pub minimum: Option<Decimal>,
 }
 
 /// Response from DepositMethods private API call
@@ -713,7 +713,7 @@ pub struct DepositAddressesRequest {
     pub new: Option<bool>,
     /// Amount you wish to deposit (only required for method=Bitcoin Lightning)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub amount: Option<String>,
+    pub amount: Option<Decimal>,
 }
 
 /// Information about a deposit address
@@ -931,8 +931,9 @@ pub struct DepositStatus {
     pub info: Option<String>,
     /// Deposit amount
     pub amount: String,
-    /// Deposit fee
-    pub fee: String,
+    /// Deposit fee (may be missing for pending/settled deposits)
+    #[serde(default)]
+    pub fee: Option<String>,
     /// Unix timestamp of deposit request
     pub time: u64,
     /// Current status of the deposit
@@ -948,8 +949,8 @@ pub struct DepositStatus {
 /// Response from DepositStatus private API call
 pub type DepositStatusResponse = Vec<DepositStatus>;
 
-// Helper deserializer for limit field which can be either false (boolean) or a string
-fn deserialize_limit<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+// Helper deserializer for limit field which can be either false (boolean) or a string (decimal)
+fn deserialize_limit<'de, D>(deserializer: D) -> std::result::Result<Option<Decimal>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -959,7 +960,7 @@ where
     let value = Value::deserialize(deserializer)?;
     match value {
         Value::Bool(false) => Ok(None),
-        Value::String(s) => Ok(Some(s)),
+        Value::String(s) => Ok(Some(Decimal::from_str(&s).map_err(Error::custom)?)),
         Value::Bool(true) => Err(Error::invalid_value(Unexpected::Bool(true), &"false or a string")),
         _ => Err(Error::invalid_type(
             Unexpected::Other(&format!("{:?}", value)),

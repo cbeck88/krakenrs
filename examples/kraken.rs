@@ -4,6 +4,7 @@ use displaydoc::Display;
 use env_logger::{Builder, Env, fmt::Color};
 use krakenrs::{BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag};
 use log::Level;
+use rust_decimal::Decimal;
 use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -91,7 +92,7 @@ enum Command {
         new: bool,
         /// Amount to deposit (required for Bitcoin Lightning)
         #[structopt(long)]
-        amount: Option<String>,
+        amount: Option<Decimal>,
     },
     /// Get withdrawal addresses
     GetWithdrawalAddresses {

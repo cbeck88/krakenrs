@@ -16,7 +16,7 @@ to the [Kraken WS API](https://docs.kraken.com/ws/), both subscribing to feeds a
 - Requests and responses are strongly-typed, conversion done using [`serde_json`](https://docs.serde.rs/serde_json/)
 - [`reqwest`](https://docs.rs/reqwest/0.11.0/reqwest/) is used for https
 - [`tokio-tungstenite`](https://docs.rs/tokio-tungstenite/latest/tokio_tungstenite/) is used for websockets
-- [`RustCrypto`](https://docs.rs/hmac/0.10.1/hmac/) crates used for the Kraken authentication scheme
+- [`RustCrypto`](https://github.com/RustCrypto) crates used for the Kraken authentication scheme
 - [`rust_decimal`](https://docs.rs/rust_decimal/latest/rust_decimal/) used to represent Decimal values from kraken
 - [`log`](https://docs.rs/log/latest/log/) is used for logging
 - Robust error handling

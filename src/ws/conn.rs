@@ -130,23 +130,25 @@ impl KrakenWsClient {
             last_outstanding_ping: None,
         };
 
+        // Mark all pairs as pending subscription
         for pair in config.subscribe_book.iter() {
             result.subscription_tracker.get_book(pair.to_owned()).last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
-            result.subscribe_book(pair.to_string()).await?;
         }
-
         for pair in config.subscribe_trades.iter() {
             result.subscription_tracker.get_trade(pair.to_owned()).last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
-            result.subscribe_trade(pair.to_string()).await?;
         }
-
         for pair in config.subscribe_ohlc.iter() {
             result.subscription_tracker.get_ohlc(pair.to_owned()).last_request =
                 Some((SubscriptionStatus::Subscribed, Instant::now()));
-            result.subscribe_ohlc(pair.to_string()).await?;
         }
+
+        // Send batched subscription requests (one message per subscription type)
+        // This avoids hitting Kraken's message rate limit
+        result.subscribe_books(config.subscribe_book.clone()).await?;
+        result.subscribe_trades(config.subscribe_trades.clone()).await?;
+        result.subscribe_ohlcs(config.subscribe_ohlc.clone()).await?;
 
         if let Some(private) = config.private.as_ref() {
             // TODO: In the future, check config.subscribe_open_orders, and only
@@ -481,11 +483,19 @@ impl KrakenWsClient {
         self.sink.close().await
     }
 
-    /// Subscribe to a book stream
+    /// Subscribe to a book stream for a single pair
     async fn subscribe_book(&mut self, pair: String) -> Result<(), Error> {
+        self.subscribe_books(vec![pair]).await
+    }
+
+    /// Subscribe to book streams for multiple pairs in a single message
+    async fn subscribe_books(&mut self, pairs: Vec<String>) -> Result<(), Error> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
         let payload = json!({
             "event": "subscribe",
-            "pair": [pair],
+            "pair": pairs,
             "subscription": {
                 "name": "book",
                 "depth": self.config.book_depth,
@@ -509,11 +519,19 @@ impl KrakenWsClient {
         sink.send(Message::Text(payload.to_string().into())).await
     }
 
-    /// Subscribe to a trade stream
+    /// Subscribe to a trade stream for a single pair
     async fn subscribe_trade(&mut self, pair: String) -> Result<(), Error> {
+        self.subscribe_trades(vec![pair]).await
+    }
+
+    /// Subscribe to trade streams for multiple pairs in a single message
+    async fn subscribe_trades(&mut self, pairs: Vec<String>) -> Result<(), Error> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
         let payload = json!({
             "event": "subscribe",
-            "pair": [pair],
+            "pair": pairs,
             "subscription": {
                 "name": "trade",
             },
@@ -535,11 +553,19 @@ impl KrakenWsClient {
         sink.send(Message::Text(payload.to_string().into())).await
     }
 
-    /// Subscribe to an ohlc stream
+    /// Subscribe to an ohlc stream for a single pair
     async fn subscribe_ohlc(&mut self, pair: String) -> Result<(), Error> {
+        self.subscribe_ohlcs(vec![pair]).await
+    }
+
+    /// Subscribe to ohlc streams for multiple pairs in a single message
+    async fn subscribe_ohlcs(&mut self, pairs: Vec<String>) -> Result<(), Error> {
+        if pairs.is_empty() {
+            return Ok(());
+        }
         let payload = json!({
             "event": "subscribe",
-            "pair": [pair],
+            "pair": pairs,
             "subscription": {
                 "name": "ohlc",
                 "interval": self.config.ohlc_interval,

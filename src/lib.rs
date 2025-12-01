@@ -7,6 +7,8 @@
 
 #![deny(missing_docs)]
 
+mod serde_helpers;
+
 mod last_and_data;
 pub use last_and_data::LastAndData;
 

@@ -2,6 +2,7 @@
 //! and serialization. It is similar to krakenex python code, but less messy.
 //! <https://github.com/veox/python3-krakenex/blob/master/krakenex/api.py>
 
+use base64ct::{Base64, Encoding};
 use displaydoc::Display;
 use hmac::{Hmac, Mac};
 use reqwest::{
@@ -228,7 +229,7 @@ impl KrakenRestClient {
             hasher.finalize()
         };
 
-        let hmac_sha_key = base64::decode(&self.config.creds.secret).map_err(Error::SigningB64)?;
+        let hmac_sha_key = Base64::decode_vec(&self.config.creds.secret).map_err(Error::SigningB64)?;
 
         type HmacSha = Hmac<Sha512>;
         let mut mac = HmacSha::new_from_slice(&hmac_sha_key).expect("Hmac should work with any key length");
@@ -236,7 +237,7 @@ impl KrakenRestClient {
         mac.update(&sha2_result);
         let mac = mac.finalize().into_bytes();
 
-        let sig = base64::encode(mac);
+        let sig = Base64::encode_string(&mac);
         Ok((post_data, sig))
     }
 
@@ -274,7 +275,7 @@ pub enum Error {
     /// Error serializing query string: {0}
     SerializingQs(serde_qs::Error),
     /// base64 error during signing: {0}
-    SigningB64(base64::DecodeError),
+    SigningB64(base64ct::Error),
     /// Invalid header value: {0}
     InvalidHeader(InvalidHeaderValue),
 }

@@ -5,10 +5,10 @@
 //! because there are actually slight differences in the schemas and strings
 //! used which make them incompatible, and the two APIs are versioned separately.
 
+use crate::serde_helpers::{comma_separated, display_fromstr};
 use displaydoc::Display;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize, Serializer};
-use serde_with::CommaSeparator;
 use std::{collections::BTreeSet, str::FromStr};
 
 /// Possible subscription status types in Kraken WS api
@@ -175,10 +175,10 @@ pub struct OrderInfo {
     /// average price (quote currency unless viqc set in oflags)
     pub avg_price: Decimal,
     /// order flags (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     pub oflags: BTreeSet<OrderFlag>,
     /// misc info (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     pub misc: BTreeSet<MiscInfo>,
 }
 
@@ -304,12 +304,12 @@ pub struct AddOrderRequest {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub price: String,
     /// order flags (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub oflags: BTreeSet<OrderFlag>,
     /// validate: If true, do not submit order
     #[serde(skip_serializing_if = "core::ops::Not::not")]
-    #[serde(with = "serde_with::rust::display_fromstr")]
+    #[serde(with = "display_fromstr")]
     pub validate: bool,
 }
 

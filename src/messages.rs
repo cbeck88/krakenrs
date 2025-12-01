@@ -1,11 +1,11 @@
 //! Structures representing json schema sent to and from Kraken REST API
 //! <https://docs.kraken.com/rest/>
 
+use crate::serde_helpers::{comma_separated, default_on_error};
 use crate::{Error, LastAndData, Result};
 use displaydoc::Display;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use serde_with::CommaSeparator;
 use std::collections::{BTreeSet, HashMap};
 use std::str::FromStr;
 
@@ -307,10 +307,10 @@ pub struct OrderInfo {
     /// average price (quote currency unless viqc set in oflags)
     pub price: Decimal,
     /// order flags (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     pub oflags: BTreeSet<OrderFlag>,
     /// misc info (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     pub misc: BTreeSet<MiscInfo>,
 }
 
@@ -391,7 +391,7 @@ pub struct OrderDescriptionInfo {
     /// secondary price
     pub price2: Decimal,
     /// leverage
-    #[serde(deserialize_with = "serde_with::rust::default_on_error::deserialize")]
+    #[serde(deserialize_with = "default_on_error::deserialize", default)]
     pub leverage: Option<Decimal>,
     /// human-readable description
     pub order: String,
@@ -483,7 +483,7 @@ pub struct AddOrderRequest {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub price: String,
     /// order flags (comma separated list)
-    #[serde(with = "serde_with::rust::StringWithSeparator::<CommaSeparator>")]
+    #[serde(with = "comma_separated")]
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub oflags: BTreeSet<OrderFlag>,
     /// validate: If true, do not submit order

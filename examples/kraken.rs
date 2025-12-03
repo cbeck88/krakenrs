@@ -1,4 +1,5 @@
 use anstyle::{AnsiColor, Style};
+use clap::{Parser, Subcommand};
 use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
@@ -12,25 +13,23 @@ use std::{
     io::Write,
     path::PathBuf,
 };
-use structopt::StructOpt;
 
 /// Structure representing parsed command-line arguments to "kraken" executable
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct KrakenConfig {
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     command: Command,
 
     /// Credentials file, formatted in json. Required only for private APIs
-    #[structopt(parse(from_os_str))]
     creds: Option<PathBuf>,
 
     /// Whether to pass "validate = true" with any orders (for testing)
-    #[structopt(short, long)]
+    #[arg(short, long)]
     validate: bool,
 }
 
 /// Commands supported by kraken executable
-#[derive(StructOpt, Display)]
+#[derive(Subcommand, Display)]
 enum Command {
     /// Get kraken system time
     Time,
@@ -89,19 +88,19 @@ enum Command {
         asset: String,
         method: String,
         /// Generate a new address
-        #[structopt(long)]
+        #[arg(long)]
         new: bool,
         /// Amount to deposit (required for Bitcoin Lightning)
-        #[structopt(long)]
+        #[arg(long)]
         amount: Option<Decimal>,
     },
     /// Get withdrawal addresses
     GetWithdrawalAddresses {
         /// Optional asset to filter by
-        #[structopt(long)]
+        #[arg(long)]
         asset: Option<String>,
         /// Optional method to filter by
-        #[structopt(long)]
+        #[arg(long)]
         method: Option<String>,
     },
     /// Withdraw funds: {asset} {key} {amount}
@@ -111,55 +110,55 @@ enum Command {
         key: String,
         amount: String,
         /// Optional address to verify against key
-        #[structopt(long)]
+        #[arg(long)]
         address: Option<String>,
         /// Optional maximum fee
-        #[structopt(long)]
+        #[arg(long)]
         max_fee: Option<String>,
     },
     /// Get status of recent withdrawals
     GetWithdrawStatus {
         /// Optional asset to filter by
-        #[structopt(long)]
+        #[arg(long)]
         asset: Option<String>,
         /// Optional method to filter by
-        #[structopt(long)]
+        #[arg(long)]
         method: Option<String>,
         /// Optional start timestamp (unix time) for filtering
-        #[structopt(long)]
+        #[arg(long)]
         start: Option<String>,
         /// Optional end timestamp (unix time) for filtering
-        #[structopt(long)]
+        #[arg(long)]
         end: Option<String>,
         /// Optional cursor for pagination
-        #[structopt(long)]
+        #[arg(long)]
         cursor: Option<String>,
         /// Optional limit for number of results (default 500)
-        #[structopt(long)]
+        #[arg(long)]
         limit: Option<u32>,
     },
     /// Get status of recent deposits
     GetDepositStatus {
         /// Optional asset to filter by
-        #[structopt(long)]
+        #[arg(long)]
         asset: Option<String>,
         /// Optional method to filter by
-        #[structopt(long)]
+        #[arg(long)]
         method: Option<String>,
         /// Optional start timestamp (unix time) for filtering
-        #[structopt(long)]
+        #[arg(long)]
         start: Option<String>,
         /// Optional end timestamp (unix time) for filtering
-        #[structopt(long)]
+        #[arg(long)]
         end: Option<String>,
         /// Optional cursor for pagination
-        #[structopt(long)]
+        #[arg(long)]
         cursor: Option<String>,
         /// Optional limit for number of results (default 500)
-        #[structopt(long)]
+        #[arg(long)]
         limit: Option<u32>,
         /// Whether to include originators field in response
-        #[structopt(long)]
+        #[arg(long)]
         originators: bool,
     },
 }
@@ -203,7 +202,7 @@ fn main() {
         })
         .init();
 
-    let config = KrakenConfig::from_args();
+    let config = KrakenConfig::parse();
 
     let mut builder = KrakenRestConfig::builder();
 

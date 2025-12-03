@@ -1,4 +1,5 @@
 use anstyle::{AnsiColor, Style};
+use clap::{Parser, Subcommand};
 use displaydoc::Display;
 use env_logger::{Builder, Env};
 use futures::executor::block_on;
@@ -14,25 +15,23 @@ use std::{
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
-use structopt::StructOpt;
 
 /// Structure representing parsed command-line arguments to kraken-feed executable
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct KrakenFeedConfig {
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     command: Command,
 
     /// Credentials file, formatted in json. Required only for private APIs
-    #[structopt(parse(from_os_str))]
     creds: Option<PathBuf>,
 
     /// Whether to pass "validate = true" with any orders (for testing)
-    #[structopt(short, long)]
+    #[arg(short, long)]
     validate: bool,
 }
 
 /// Commands supported by kraken-feed executable
-#[derive(StructOpt, Display)]
+#[derive(Subcommand, Display)]
 enum Command {
     /// Get websockets feed for one or more asset-pair books
     Book { pairs: Vec<String> },
@@ -126,7 +125,7 @@ fn main() {
         })
         .init();
 
-    let config = KrakenFeedConfig::from_args();
+    let config = KrakenFeedConfig::parse();
 
     match config.command {
         Command::Book { pairs } => {

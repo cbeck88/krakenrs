@@ -21,6 +21,7 @@ path = "examples/kraken.rs"
 [[example]]
 name = "kraken-feed"
 path = "examples/kraken-feed.rs"
+required-features = ["ws"]
 
 [dependencies]
 base64ct = { version = "1", features = ["alloc"] }

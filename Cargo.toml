@@ -50,7 +50,7 @@ tokio = { version = "1.15", features = ["time"] }
 default = ["ws", "native-tls"]
 ws = ["dep:tokio", "dep:tokio-tungstenite", "dep:crc32fast"]
 native-tls = ["reqwest/native-tls", "tokio-tungstenite?/native-tls"]
-rustls-tls = ["reqwest/rustls-tls", "tokio-tungstenite?/rustls"]
+rustls-tls = ["reqwest/rustls-tls-webpki-roots-no-provider", "tokio-tungstenite?/rustls-tls-webpki-roots"]
 
 [lints.clippy]
 result_large_err = "allow"

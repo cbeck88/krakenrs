@@ -3,8 +3,8 @@ krakenrs
 
 Unofficial bindings to Kraken spot trading API in Rust.
 
-[![Crates.io](https://img.shields.io/crates/v/conf?style=flat-square)](https://crates.io/crates/krakenrs)
-[![Crates.io](https://img.shields.io/crates/d/conf?style=flat-square)](https://crates.io/crates/krakenrs)
+[![Crates.io](https://img.shields.io/crates/v/krakenrs?style=flat-square)](https://crates.io/crates/krakenrs)
+[![Crates.io](https://img.shields.io/crates/d/krakenrs?style=flat-square)](https://crates.io/crates/krakenrs)
 [![License](https://img.shields.io/badge/license-WTFPL%202.0-blue?style=flat-square)](LICENSE-WTFPL)
 
 [API Docs](https://docs.rs/krakenrs/latest/krakenrs/) | [Examples](./examples)

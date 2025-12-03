@@ -12,11 +12,12 @@ use serde::{Deserialize, Serialize, Serializer};
 use std::{collections::BTreeSet, str::FromStr};
 
 /// Possible subscription status types in Kraken WS api
-#[derive(Debug, Display, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Default, Display, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum SubscriptionStatus {
     /// subscribed
     Subscribed,
     /// unsubscribed
+    #[default]
     Unsubscribed,
     /// error
     Error,
@@ -26,12 +27,6 @@ impl SubscriptionStatus {
     /// Check if the status is equal to Subscribed
     pub fn is_subscribed(&self) -> bool {
         *self == SubscriptionStatus::Subscribed
-    }
-}
-
-impl Default for SubscriptionStatus {
-    fn default() -> Self {
-        Self::Unsubscribed
     }
 }
 
@@ -81,19 +76,14 @@ pub type UserRefId = i32;
 
 /// Type (buy/sell)
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Default, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum BsType {
     /// Buy
     Buy,
     /// Sell
+    #[default]
     Sell,
-}
-
-impl Default for BsType {
-    fn default() -> Self {
-        Self::Sell
-    }
 }
 
 impl From<crate::BsType> for BsType {
@@ -107,12 +97,13 @@ impl From<crate::BsType> for BsType {
 
 /// Possible order types in Kraken.
 /// These are kebab-case strings in json
-#[derive(Debug, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Default, Display, Clone, Serialize, Deserialize, Ord, PartialOrd, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum OrderType {
     /// Market
     Market,
     /// Limit
+    #[default]
     Limit,
     /// Stop-Loss
     StopLoss,
@@ -124,12 +115,6 @@ pub enum OrderType {
     TakeProfitLimit,
     /// Settle-Position
     SettlePosition,
-}
-
-impl Default for OrderType {
-    fn default() -> Self {
-        Self::Limit
-    }
 }
 
 /// Possible order statuses in Kraken.

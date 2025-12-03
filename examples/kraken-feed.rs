@@ -1,5 +1,5 @@
 use anstyle::{AnsiColor, Style};
-use clap::{Parser, Subcommand};
+use conf::{Conf, Subcommands};
 use displaydoc::Display;
 use env_logger::{Builder, Env};
 use futures::executor::block_on;
@@ -17,12 +17,13 @@ use std::{
 };
 
 /// Structure representing parsed command-line arguments to kraken-feed executable
-#[derive(Parser)]
+#[derive(Conf)]
 struct KrakenFeedConfig {
-    #[command(subcommand)]
+    #[conf(subcommands)]
     command: Command,
 
     /// Credentials file, formatted in json. Required only for private APIs
+    #[conf(pos)]
     creds: Option<PathBuf>,
 
     /// Whether to pass "validate = true" with any orders (for testing)
@@ -31,45 +32,73 @@ struct KrakenFeedConfig {
 }
 
 /// Commands supported by kraken-feed executable
-#[derive(Subcommand, Display)]
+#[derive(Subcommands, Display)]
 enum Command {
     /// Get websockets feed for one or more asset-pair books
-    Book { pairs: Vec<String> },
+    Book {
+        #[conf(repeat, pos)]
+        pairs: Vec<String>,
+    },
 
     /// Get websockets feed for an asset-pair candle
-    Ohlc { pair: String },
+    Ohlc {
+        #[conf(pos)]
+        pair: String,
+    },
 
     /// Get public trades feed for one asset-pair
-    Trades { pair: String },
+    Trades {
+        #[conf(pos)]
+        pair: String,
+    },
 
     /// Get websockets feed for own open orders
-    OpenOrders {},
+    OpenOrders,
 
     /// Get websockets feed for own trades
-    OwnTrades {},
+    OwnTrades,
 
     /// Market buy order: {volume} {pair}
-    MarketBuy { volume: String, pair: String },
+    MarketBuy {
+        #[conf(pos)]
+        volume: String,
+        #[conf(pos)]
+        pair: String,
+    },
 
     /// Market sell order: {volume} {pair}
-    MarketSell { volume: String, pair: String },
+    MarketSell {
+        #[conf(pos)]
+        volume: String,
+        #[conf(pos)]
+        pair: String,
+    },
 
     /// Limit buy order: {volume} {pair} @ {price}
     LimitBuy {
+        #[conf(pos)]
         volume: String,
+        #[conf(pos)]
         pair: String,
+        #[conf(pos)]
         price: String,
     },
 
     /// Limit sell order: {volume} {pair} @ {price}
     LimitSell {
+        #[conf(pos)]
         volume: String,
+        #[conf(pos)]
         pair: String,
+        #[conf(pos)]
         price: String,
     },
 
     /// Cancel order: {id}
-    CancelOrder { id: String },
+    CancelOrder {
+        #[conf(pos)]
+        id: String,
+    },
 
     /// Cancel all orders
     CancelAllOrders,
@@ -216,7 +245,7 @@ fn main() {
                 }
             }
         }
-        Command::OpenOrders {} => {
+        Command::OpenOrders => {
             let config = get_private_ws_builder(&config.creds)
                 .subscribe_open_orders(true)
                 .build()
@@ -246,7 +275,7 @@ fn main() {
                 }
             }
         }
-        Command::OwnTrades {} => {
+        Command::OwnTrades => {
             let config = get_private_ws_builder(&config.creds)
                 .subscribe_own_trades(true)
                 .build()

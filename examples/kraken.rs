@@ -1,5 +1,5 @@
 use anstyle::{AnsiColor, Style};
-use clap::{Parser, Subcommand};
+use conf::{Conf, Subcommands};
 use core::convert::TryFrom;
 use core::fmt::Debug;
 use displaydoc::Display;
@@ -15,12 +15,13 @@ use std::{
 };
 
 /// Structure representing parsed command-line arguments to "kraken" executable
-#[derive(Parser)]
+#[derive(Conf)]
 struct KrakenConfig {
-    #[command(subcommand)]
+    #[conf(subcommands)]
     command: Command,
 
     /// Credentials file, formatted in json. Required only for private APIs
+    #[conf(pos)]
     creds: Option<PathBuf>,
 
     /// Whether to pass "validate = true" with any orders (for testing)
@@ -29,7 +30,7 @@ struct KrakenConfig {
 }
 
 /// Commands supported by kraken executable
-#[derive(Subcommand, Display)]
+#[derive(Subcommands, Display)]
 enum Command {
     /// Get kraken system time
     Time,
@@ -38,54 +39,101 @@ enum Command {
     /// Get kraken's asset list
     Assets,
     /// Get kraken's asset pairs info: {pairs:?}
-    AssetPairs { pairs: Vec<String> },
+    AssetPairs {
+        #[conf(repeat, pos)]
+        pairs: Vec<String>,
+    },
     /// Get kraken's ticker info: {pairs:?}
-    Ticker { pairs: Vec<String> },
+    Ticker {
+        #[conf(repeat, pos)]
+        pairs: Vec<String>,
+    },
     /// Get OHLC data {pair}, {since:?}, @ {interval:?} minutes
-    OHLC {
+    Ohlc {
+        #[conf(pos)]
         pair: String,
+        #[conf(pos)]
         since: Option<String>,
+        #[arg(long)]
         interval: Option<u16>,
     },
     /// Get recent trades since some timestamp: {pair}, {since:?}
-    RecentTrades { pair: String, since: Option<String> },
+    RecentTrades {
+        #[conf(pos)]
+        pair: String,
+        #[conf(pos)]
+        since: Option<String>,
+    },
     /// Get account balance
     GetBalance,
     /// Get account trade volume (and fees): {pairs:?}
-    GetTradeVolume { pairs: Vec<String> },
+    GetTradeVolume {
+        #[conf(repeat, pos)]
+        pairs: Vec<String>,
+    },
     /// Get websockets token
     GetWebSocketsToken,
     /// Query specific orders by order id
-    QueryOrders { order_ids: Vec<String> },
+    QueryOrders {
+        #[conf(repeat, pos)]
+        order_ids: Vec<String>,
+    },
     /// Get open orders list
     GetOpenOrders,
     /// Cancel order: {id}
-    CancelOrder { id: String },
+    CancelOrder {
+        #[conf(pos)]
+        id: String,
+    },
     /// Cancel all orders
     CancelAllOrders,
     /// Cancel all orders after: {timeout}
-    CancelAllOrdersAfter { timeout: u64 },
+    CancelAllOrdersAfter {
+        #[conf(pos)]
+        timeout: u64,
+    },
     /// Market buy order: {volume} {pair}
-    MarketBuy { volume: String, pair: String },
+    MarketBuy {
+        #[conf(pos)]
+        volume: String,
+        #[conf(pos)]
+        pair: String,
+    },
     /// Market sell order: {volume} {pair}
-    MarketSell { volume: String, pair: String },
+    MarketSell {
+        #[conf(pos)]
+        volume: String,
+        #[conf(pos)]
+        pair: String,
+    },
     /// Limit buy order: {volume} {pair} @ {price}
     LimitBuy {
+        #[conf(pos)]
         volume: String,
+        #[conf(pos)]
         pair: String,
+        #[conf(pos)]
         price: String,
     },
     /// Limit sell order: {volume} {pair} @ {price}
     LimitSell {
+        #[conf(pos)]
         volume: String,
+        #[conf(pos)]
         pair: String,
+        #[conf(pos)]
         price: String,
     },
     /// Get deposit methods for asset: {asset}
-    GetDepositMethods { asset: String },
+    GetDepositMethods {
+        #[conf(pos)]
+        asset: String,
+    },
     /// Get deposit addresses for asset and method: {asset} {method}
     GetDepositAddresses {
+        #[conf(pos)]
         asset: String,
+        #[conf(pos)]
         method: String,
         /// Generate a new address
         #[arg(long)]
@@ -105,9 +153,12 @@ enum Command {
     },
     /// Withdraw funds: {asset} {key} {amount}
     Withdraw {
+        #[conf(pos)]
         asset: String,
         /// Withdrawal key name (as configured in your Kraken account)
+        #[conf(pos)]
         key: String,
+        #[conf(pos)]
         amount: String,
         /// Optional address to verify against key
         #[arg(long)]
@@ -240,7 +291,7 @@ fn main() {
             let sorted_result = result.into_iter().collect::<BTreeMap<_, _>>();
             log_value(&sorted_result);
         }
-        Command::OHLC { pair, since, interval } => {
+        Command::Ohlc { pair, since, interval } => {
             let result = if let Some(interval) = interval {
                 api.ohlc_at_interval(pair, interval, since)
             } else {

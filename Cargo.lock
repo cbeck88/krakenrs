@@ -237,7 +237,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9e340e012a1bf4935f5282ed1436d1489548e8f72308207ea5df0e23d2d03f8"
 dependencies = [
  "clap_builder",
- "clap_derive",
 ]
 
 [[package]]
@@ -253,18 +252,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap_derive"
-version = "4.5.49"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a0b5487afeab2deb2ff4e03a807ad1a03ac532ff5a2cee5d86884440c7f7671"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.111",
-]
-
-[[package]]
 name = "clap_lex"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -275,6 +262,31 @@ name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
+
+[[package]]
+name = "conf"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4201762fcfd72600b1c852bf6a731a1797ce6b56d1d6f7a32a206a1078ae0438"
+dependencies = [
+ "anstyle",
+ "clap",
+ "clap_lex",
+ "conf_derive",
+ "serde",
+]
+
+[[package]]
+name = "conf_derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35060dcea66f85eb49bf7834d451089a6d5cde0f75957aa78bcc7029dc050015"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.111",
+]
 
 [[package]]
 name = "core-foundation"
@@ -940,7 +952,7 @@ dependencies = [
  "anstyle",
  "base64ct",
  "chrono",
- "clap",
+ "conf",
  "crc32fast",
  "displaydoc",
  "env_logger",

@@ -1,5 +1,6 @@
+use anstyle::{AnsiColor, Style};
 use displaydoc::Display;
-use env_logger::{Builder, Env, fmt::Color};
+use env_logger::{Builder, Env};
 use futures::executor::block_on;
 use krakenrs::{
     BsType, KrakenCredentials, KrakenRestAPI, KrakenRestConfig, LimitOrder, MarketOrder, OrderFlag,
@@ -103,22 +104,20 @@ pub fn main() {
     // setting.
     Builder::from_env(Env::default().default_filter_or("info"))
         .format(|buf, record| {
-            let mut style = buf.style();
-
             let color = match record.level() {
-                Level::Error => Color::Red,
-                Level::Warn => Color::Yellow,
-                Level::Info => Color::Green,
-                Level::Debug => Color::Cyan,
-                Level::Trace => Color::Magenta,
+                Level::Error => AnsiColor::Red,
+                Level::Warn => AnsiColor::Yellow,
+                Level::Info => AnsiColor::Green,
+                Level::Debug => AnsiColor::Cyan,
+                Level::Trace => AnsiColor::Magenta,
             };
-            style.set_color(color).set_bold(true);
+            let style = Style::new().fg_color(Some(color.into())).bold();
 
             writeln!(
                 buf,
-                "{} {} [{} {}:{}] {}",
+                "{} {style}{}{style:#} [{} {}:{}] {}",
                 chrono::Utc::now(),
-                style.value(record.level()),
+                record.level(),
                 record.module_path().unwrap_or("?"),
                 record.file().unwrap_or("?"),
                 record.line().unwrap_or(0),

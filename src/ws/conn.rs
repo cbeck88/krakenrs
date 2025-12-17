@@ -908,12 +908,25 @@ impl KrakenWsClient {
                             }
                         }
                         Entry::Vacant(entry) => {
-                            // Parse the data as an OrderInfo object and add the new order id
-                            let order_info: OrderInfo = serde_json::from_value(val.clone()).map_err(|err| {
-                                log::error!("Could not parse open order data as an OrderInfo object: {}", err);
-                                "OrderInfo deserialization error"
-                            })?;
-                            entry.insert(order_info);
+                            // Try to parse as a full OrderInfo (new order) or as a partial update
+                            // Kraken sends partial updates (vol_exec, cost, fee, avg_price only) for
+                            // orders that may not be in our map yet (e.g. after reconnect).
+                            match serde_json::from_value::<OrderInfo>(val.clone()) {
+                                Ok(order_info) => {
+                                    entry.insert(order_info);
+                                }
+                                Err(err) => {
+                                    // This is likely a partial fill update for an order we don't have.
+                                    // This can happen after reconnection or if the initial snapshot
+                                    // didn't include this order. Log and skip.
+                                    log::warn!(
+                                        "Received update for unknown order {}: {} (payload: {})",
+                                        order_id,
+                                        err,
+                                        val
+                                    );
+                                }
+                            }
                         }
                     }
                 }

@@ -67,6 +67,7 @@ pub mod comma_separated {
 /// #[serde(with = "crate::serde_helpers::display_fromstr")]
 /// pub validate: bool,
 /// ```
+#[allow(dead_code)]
 pub mod display_fromstr {
     use super::*;
 

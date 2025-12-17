@@ -375,7 +375,7 @@ mod tests {
         "type": "sell",
         "vol": "1000000000.00000000"
       }"#;
-        let val: OwnTrade = serde_json::from_str(&json).unwrap();
+        let val: OwnTrade = serde_json::from_str(json).unwrap();
 
         assert_eq!(val.pair, "XBT/EUR");
         assert_eq!(val.bs_type, BsType::Sell);

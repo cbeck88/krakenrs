@@ -134,6 +134,24 @@ pub enum OrderStatus {
     Expired,
 }
 
+/// Partial order update sent by Kraken WS API for fill updates.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OrderInfoPartialUpdate {
+    /// User reference id for the order
+    pub userref: UserRefId,
+    /// volume executed (base currency unless viqc set in oflags)
+    pub vol_exec: Decimal,
+    /// total cost (quote currency unless unless viqc set in oflags)
+    pub cost: Decimal,
+    /// total fee (quote currency)
+    pub fee: Decimal,
+    /// average price (quote currency unless viqc set in oflags)
+    pub avg_price: Decimal,
+    /// order flags (comma separated list)
+    #[serde(with = "comma_separated")]
+    pub oflags: BTreeSet<OrderFlag>,
+}
+
 /// Order-info used in OpenOrders and QueryOrders APIs
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OrderInfo {
@@ -357,7 +375,7 @@ mod tests {
         "type": "sell",
         "vol": "1000000000.00000000"
       }"#;
-        let val: OwnTrade = serde_json::from_str(&json).unwrap();
+        let val: OwnTrade = serde_json::from_str(json).unwrap();
 
         assert_eq!(val.pair, "XBT/EUR");
         assert_eq!(val.bs_type, BsType::Sell);

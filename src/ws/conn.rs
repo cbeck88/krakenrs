@@ -1,6 +1,9 @@
 use super::{
     config::KrakenWsConfig,
-    messages::{AddOrderRequest, BsType, OrderInfo, OrderStatus, OwnTrade, SubscriptionStatus, SystemStatus},
+    messages::{
+        AddOrderRequest, BsType, OrderInfo, OrderInfoPartialUpdate, OrderStatus, OwnTrade, SubscriptionStatus,
+        SystemStatus,
+    },
     types::{BookData, Candle, PublicTrade, SubscriptionType},
 };
 use futures::{
@@ -908,12 +911,28 @@ impl KrakenWsClient {
                             }
                         }
                         Entry::Vacant(entry) => {
-                            // Parse the data as an OrderInfo object and add the new order id
-                            let order_info: OrderInfo = serde_json::from_value(val.clone()).map_err(|err| {
-                                log::error!("Could not parse open order data as an OrderInfo object: {}", err);
-                                "OrderInfo deserialization error"
-                            })?;
-                            entry.insert(order_info);
+                            // Try to parse as a full OrderInfo (new order)
+                            match serde_json::from_value::<OrderInfo>(val.clone()) {
+                                Ok(order_info) => {
+                                    entry.insert(order_info);
+                                }
+                                Err(full_err) => {
+                                    // Not a full OrderInfo. Check if it's a partial fill update that arrived out of order.
+                                    if serde_json::from_value::<OrderInfoPartialUpdate>(val.clone()).is_ok() {
+                                        log::warn!(
+                                            "Received partial fill update for unknown order {}, skipping (payload: {})",
+                                            order_id,
+                                            val
+                                        );
+                                    } else {
+                                        log::error!(
+                                            "Could not parse open order data as OrderInfo or partial update: {}",
+                                            full_err
+                                        );
+                                        return Err("OrderInfo deserialization error");
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -1,3 +1,6 @@
+// TODO: remove when rustc 1.93+ is released (rust-lang/rust#147648 regression in 1.92.0)
+#![allow(unused_assignments)]
+
 use anstyle::{AnsiColor, Style};
 use conf::{Conf, Subcommands};
 use displaydoc::Display;

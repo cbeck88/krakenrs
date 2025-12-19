@@ -5,10 +5,7 @@
 use base64ct::{Base64, Encoding};
 use displaydoc::Display;
 use hmac::{Hmac, Mac};
-use reqwest::{
-    blocking::Response,
-    header::{HeaderMap, HeaderValue, InvalidHeaderValue},
-};
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256, Sha512};
 use std::{
@@ -18,7 +15,9 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
-use url::{ParseError as UrlParseError, Url};
+use url::Url;
+
+use crate::{Error, Result};
 
 /// Configuration needed to initialize a Kraken client.
 /// The credentials aren't needed if only public APIs are used
@@ -36,6 +35,21 @@ impl KrakenRestConfig {
     /// Create a builder for the KrakenRestConfig object
     pub fn builder() -> KrakenRestConfigBuilder {
         Default::default()
+    }
+
+    /// Get the configured timeout
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    /// Get a reference to the credentials
+    pub fn creds(&self) -> &KrakenCredentials {
+        &self.creds
+    }
+
+    /// Set the credentials
+    pub fn set_creds(&mut self, creds: KrakenCredentials) {
+        self.creds = creds;
     }
 }
 
@@ -247,59 +261,5 @@ impl KrakenRestClient {
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|_| Error::TimeError)?
             .as_millis() as u64)
-    }
-}
-
-/// Alias for Result that contains the error type for this crate
-pub type Result<T> = core::result::Result<T, Error>;
-
-/// An error that can be generated from the low-level kraken client
-#[derive(Display, Debug)]
-pub enum Error {
-    /// Failed forming URI: {0}
-    Url(UrlParseError),
-    /// Reqwest error: {0}
-    Reqwest(reqwest::Error),
-    /// kraken returned bad status: {0:?}
-    BadStatus(Response),
-    /// json deserialization failed: {0}, body was: {1}
-    Json(serde_json::Error, String),
-    /// Kraken errors present: {0:?}
-    KrakenErrors(Vec<String>),
-    /// Missing result json
-    MissingResultJson,
-    /// Missing credentials required for private APIs
-    MissingCredentials,
-    /// Time error (preventing nonce computation)
-    TimeError,
-    /// Error serializing query string: {0}
-    SerializingQs(serde_qs::Error),
-    /// base64 error during signing: {0}
-    SigningB64(base64ct::Error),
-    /// Invalid header value: {0}
-    InvalidHeader(InvalidHeaderValue),
-}
-
-impl From<UrlParseError> for Error {
-    fn from(src: UrlParseError) -> Self {
-        Self::Url(src)
-    }
-}
-
-impl From<reqwest::Error> for Error {
-    fn from(src: reqwest::Error) -> Self {
-        Self::Reqwest(src)
-    }
-}
-
-impl From<InvalidHeaderValue> for Error {
-    fn from(src: InvalidHeaderValue) -> Self {
-        Self::InvalidHeader(src)
-    }
-}
-
-impl From<serde_qs::Error> for Error {
-    fn from(src: serde_qs::Error) -> Self {
-        Self::SerializingQs(src)
     }
 }

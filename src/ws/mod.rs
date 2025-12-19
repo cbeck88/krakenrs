@@ -161,6 +161,112 @@ impl KrakenWsAPI {
         })
     }
 
+    /// Create a new web sockets connection to Kraken and subscribe to
+    /// specified channels (async version)
+    ///
+    /// This is the async version that should be used when you are already in an async context.
+    /// It establishes the websockets connection and spawns a background thread to manage updates.
+    pub async fn new_async(src: KrakenWsConfig) -> Result<Self, Error> {
+        let (mut client, mut stream, output) = KrakenWsClient::new(src).await?;
+        let (sender, mut receiver) = mpsc::unbounded_channel();
+
+        let worker_thread = Some(thread::Builder::new().name("kraken-ws-internal-runtime".into()).spawn(
+            move || {
+                let rt = runtime::Builder::new_current_thread().enable_all().build().unwrap();
+                rt.block_on(async move {
+                    // Every second, confirm that we got a heart beat, or send a ping / expect a pong
+                    let mut interval = time::interval(Duration::from_secs(1));
+                    loop {
+                        tokio::select! {
+                            stream_result = stream.next() => {
+                                match stream_result {
+                                    Some(result) => {
+                                        match client.update(result) {
+                                            Ok(()) => {
+                                                // Maybe adjust subscriptions, closing corrupted subscriptions,
+                                                // and resubscribing to any subscriptions that are missing for a while
+                                                // to any subscriptions that were canceled
+                                                client.check_subscriptions().await;
+                                            }
+                                            Err(err) => {
+                                                log::error!("error, closing stream: {}", err);
+                                                drop(client.close().await);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    None => {
+                                        log::warn!("stream closed by kraken");
+                                        drop(client.close().await);
+                                        return;
+                                    }
+                                }
+                            }
+                            msg = receiver.recv() => {
+                                match msg {
+                                    None | Some(LocalRequest::Stop) => {
+                                        drop(client.close().await);
+                                        return;
+                                    }
+                                    Some(LocalRequest::AddOrder{request, result_sender}) => {
+                                        if let Err(err) = client.add_order(request, result_sender).await {
+                                            log::error!("error submitting an order, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
+                                    }
+                                    Some(LocalRequest::CancelOrder{tx_id, result_sender}) => {
+                                        if let Err(err) = client.cancel_order(tx_id, result_sender).await {
+                                            log::error!("error canceling an order, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
+                                    }
+                                    Some(LocalRequest::CancelAllOrders{result_sender}) => {
+                                        if let Err(err) = client.cancel_all_orders(result_sender).await {
+                                            log::error!("error canceling all orders, closing stream: {}", err);
+                                            drop(client.close().await);
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                            _ = interval.tick() => {
+                                if let Some(time) = client.get_last_message_time() {
+                                    // If we haven't heard anything in a while that's bad
+                                    // Kraken says they send a heartbeat about every second
+                                    let now = Instant::now();
+                                    if time + Duration::from_secs(2) < now {
+                                        // Check if we earlier sent a ping
+                                        if let Some(ping_time) = client.get_last_outstanding_ping_time() {
+                                            if ping_time + Duration::from_secs(1) < now {
+                                                log::error!("Kraken did not respond to ping, closing stream");
+                                                drop(client.close().await);
+                                                return;
+                                            }
+                                        } else {
+                                            // There is no outstanding ping, let's send a ping
+                                            if let Err(err) = client.ping().await {
+                                                log::error!("error sending ping, closing stream: {}", err);
+                                                drop(client.close().await);
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            },
+        )?);
+        Ok(Self {
+            worker_thread,
+            sender,
+            output,
+        })
+    }
+
     /// Get the system status
     pub fn system_status(&self) -> Option<SystemStatus> {
         self.output.system_status.lock().expect("mutex poisoned").clone()

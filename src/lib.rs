@@ -9,11 +9,16 @@
 
 mod serde_helpers;
 
+mod error;
+pub use error::{Error, Result};
+
 mod last_and_data;
 pub use last_and_data::LastAndData;
 
 mod kraken_rest_client;
-pub use kraken_rest_client::*;
+pub use kraken_rest_client::{
+    BuilderError, KrakenCredentials, KrakenRestClient, KrakenRestConfig, KrakenRestConfigBuilder,
+};
 
 mod messages;
 use messages::{
@@ -38,6 +43,10 @@ use std::collections::BTreeSet;
 // Websockets API support
 #[cfg(feature = "ws")]
 pub mod ws;
+
+// Async (non-blocking) REST API support
+#[cfg(feature = "async")]
+pub mod non_blocking;
 
 /// A description of a market order to place
 #[derive(Debug, Clone)]
